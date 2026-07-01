@@ -15,8 +15,8 @@ const budget = {
   ntPerUsd: 30,
   foodNtPerDay: 200,
   people: 14,
-  tmfStart: '2026-07-06', tmfEnd: '2026-07-10',
-  vbsStart: '2026-07-06', vbsEnd: '2026-07-10',
+  tmfStart: '2026-07-20', tmfEnd: '2026-07-24',
+  vbsStart: '2026-07-13', vbsEnd: '2026-07-17',
   startUsd: { Andrew: 6300, Keren: 6300 },
   items: [
     { cat: 'Ministry & giving', name: 'TMF', usd: 3156 },
