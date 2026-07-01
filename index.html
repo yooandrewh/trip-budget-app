@@ -526,7 +526,7 @@ function renderAnalysis() {
   $('#verdict').innerHTML = `<div class="verdict ${ok ? 'good' : 'bad'}">
     <div class="funds-top"><span>Trip funds</span><span>$${fmt(funds)}</span></div>
     <div class="funds-row"><span>− Spent so far</span><span>$${fmt(spent,0)}</span></div>
-    <div class="funds-row"><span>− Still planned</span><span>$${fmt(planned,0)}</span></div>
+    <div class="funds-row"><span>− Still planned (incl. food)</span><span>$${fmt(planned,0)}</span></div>
     <div class="funds-row total"><span>${ok ? '✅ Left over' : '🚨 Short'}</span><span>$${fmt(Math.abs(leftover),0)}</span></div>
   </div>`;
 
@@ -545,7 +545,7 @@ function renderAnalysis() {
       + g.items.map(i => row(escapeHtml(i.name), i.usd)).join('')
       + (g.items.length > 1 ? `<div class="hold subtotal"><span class="who">${escapeHtml(g.cat)} subtotal</span><span class="amts">$${fmt(g.total,0)}</span></div>` : '');
   }
-  bhtml += `<div class="hold grand"><span class="who">Planned total</span><span class="amts"><b>$${fmt(planned,0)}</b></span></div>`;
+  bhtml += `<div class="hold grand"><span class="who">Planned total (food + all items)</span><span class="amts"><b>$${fmt(planned,0)}</b></span></div>`;
   $('#budget').innerHTML = bhtml;
 
   // Amount owed = credit-card charges (they never touched cash on hand).
