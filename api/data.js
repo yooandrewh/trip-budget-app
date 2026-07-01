@@ -11,10 +11,18 @@ export default async function handler(req, res) {
     const settings = {};
     for (const row of budget.rows) settings[row['Setting']] = row['Value'];
 
+    // "Budget: <Category>: <Name>" rows become grouped items; a row without a
+    // category ("Budget: <Name>") lands in "Other".
     const items = [], startUsd = {};
     for (const row of budget.rows) {
       const k = row['Setting'];
-      if (k && String(k).startsWith('Budget: ')) items.push({ name: String(k).slice(8), usd: Number(row['Value']) || 0 });
+      if (k && String(k).startsWith('Budget: ')) {
+        const rest = String(k).slice(8);
+        const sep = rest.indexOf(': ');
+        items.push(sep > 0
+          ? { cat: rest.slice(0, sep), name: rest.slice(sep + 2), usd: Number(row['Value']) || 0 }
+          : { cat: 'Other', name: rest, usd: Number(row['Value']) || 0 });
+      }
       if (k && String(k).startsWith('Start USD: ')) startUsd[String(k).slice(11)] = Number(row['Value']) || 0;
     }
 

@@ -181,11 +181,11 @@ export const BUDGET_DEFAULTS = [
   ['VBS End', '2026-07-10'],
   ['Start USD: Andrew', 6300],
   ['Start USD: Keren', 6300],
-  ['Budget: TMF', 3156],
-  ['Budget: Hot springs', 652],
-  ['Budget: Take home to KCM', 4000],
-  ['Budget: Offering Church', 1000],
-  ['Budget: Honorarium LP', 1000],
+  ['Budget: Ministry & giving: TMF', 3156],
+  ['Budget: Ministry & giving: Take home to KCM', 4000],
+  ['Budget: Ministry & giving: Offering Church', 1000],
+  ['Budget: Ministry & giving: Honorarium LP', 1000],
+  ['Budget: Activities: Hot springs', 652],
 ];
 
 let _bootstrapped = false;

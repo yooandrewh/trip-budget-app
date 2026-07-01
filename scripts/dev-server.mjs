@@ -18,11 +18,11 @@ const budget = {
   vbsStart: '2026-07-06', vbsEnd: '2026-07-10',
   startUsd: { Andrew: 6300, Keren: 6300 },
   items: [
-    { name: 'TMF', usd: 3156 },
-    { name: 'Hot springs', usd: 652 },
-    { name: 'Take home to KCM', usd: 4000 },
-    { name: 'Offering Church', usd: 1000 },
-    { name: 'Honorarium LP', usd: 1000 },
+    { cat: 'Ministry & giving', name: 'TMF', usd: 3156 },
+    { cat: 'Ministry & giving', name: 'Take home to KCM', usd: 4000 },
+    { cat: 'Ministry & giving', name: 'Offering Church', usd: 1000 },
+    { cat: 'Ministry & giving', name: 'Honorarium LP', usd: 1000 },
+    { cat: 'Activities', name: 'Hot springs', usd: 652 },
   ],
 };
 // Real transactions so far (also seeded into the sheet by scripts/seed.mjs).

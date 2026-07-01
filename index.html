@@ -72,6 +72,14 @@
   .verdict.good { background: rgba(14,164,122,.08); border-color: rgba(14,164,122,.45); color: var(--accent); }
   .verdict.bad  { background: rgba(214,69,69,.08); border-color: rgba(214,69,69,.45); color: var(--red); }
   .verdict .d { font-weight: 400; font-size: 13px; color: var(--text); margin-top: 6px; line-height: 1.5; }
+  .funds-top { display: flex; justify-content: space-between; font-size: 20px; font-weight: 800; color: var(--text); padding-bottom: 8px; border-bottom: 1px solid var(--line); margin-bottom: 6px; }
+  .funds-row { display: flex; justify-content: space-between; font-weight: 400; font-size: 14px; color: var(--text); padding: 3px 0; }
+  .funds-row.total { font-weight: 800; font-size: 17px; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 8px; color: inherit; }
+  .bgroup-h { color: var(--dim); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin: 12px 2px 2px; }
+  .bgroup-h:first-child { margin-top: 0; }
+  .hold.subtotal { color: var(--dim); font-size: 13px; }
+  .hold.subtotal .who { font-weight: 600; }
+  .hold.grand { margin-top: 6px; }
   #confirm-box { margin-top: 16px; background: var(--card2); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
   .confirm-sum { font-size: 15px; line-height: 1.6; }
   .confirm-sum b { font-size: 20px; }
@@ -515,18 +523,30 @@ function renderAnalysis() {
   const leftover = funds - spent - planned;
 
   const ok = leftover >= 0;
-  $('#verdict').innerHTML = `<div class="verdict ${ok ? 'good' : 'bad'}">${ok ? '✅ On track' : '🚨 Over budget'}
-    <div class="d">Funds <b>$${fmt(funds)}</b> − spent <b>$${fmt(spent,0)}</b> − still planned <b>$${fmt(planned,0)}</b>
-    (incl. NT$${fmt(food.nt)} food for the ${food.days} days left) = <b>$${fmt(leftover,0)}</b> ${ok ? 'to spare' : 'short'}.</div></div>`;
+  $('#verdict').innerHTML = `<div class="verdict ${ok ? 'good' : 'bad'}">
+    <div class="funds-top"><span>Trip funds</span><span>$${fmt(funds)}</span></div>
+    <div class="funds-row"><span>− Spent so far</span><span>$${fmt(spent,0)}</span></div>
+    <div class="funds-row"><span>− Still planned</span><span>$${fmt(planned,0)}</span></div>
+    <div class="funds-row total"><span>${ok ? '✅ Left over' : '🚨 Short'}</span><span>$${fmt(Math.abs(leftover),0)}</span></div>
+  </div>`;
 
-  $('#budget').innerHTML =
-    `<div class="hold"><span class="who" style="font-weight:400">Food · ${food.days} days left (${b.foodNtPerDay}NT × 2, TMF/VBS meals excluded)</span><span class="amts">$${fmt(foodUsd,0)}</span></div>`
-    + items.map(i => `
-    <div class="hold"><span class="who" style="font-weight:400">${escapeHtml(i.name)}</span><span class="amts">$${fmt(i.usd)}</span></div>`).join('')
-    + `<div class="hold"><span class="who">Planned total</span><span class="amts"><b>$${fmt(planned,0)}</b></span></div>
-       <div class="hold"><span class="who">Spent so far</span><span class="amts"><b>$${fmt(spent,0)}</b></span></div>
-       <div class="hold"><span class="who">Trip funds</span><span class="amts"><b>$${fmt(funds)}</b></span></div>
-       <div class="hold"><span class="who" style="font-size:17px">Left over if all goes to plan</span><span class="amts" style="font-size:17px"><b style="color:${ok ? 'var(--accent)' : 'var(--red)'}">$${fmt(leftover,0)}</b></span></div>`;
+  // Grouped budget: Food first, then each sheet category with a subtotal.
+  const groups = [];
+  for (const i of items) {
+    let g = groups.find(x => x.cat === i.cat);
+    if (!g) groups.push(g = { cat: i.cat, items: [], total: 0 });
+    g.items.push(i); g.total += i.usd;
+  }
+  const row = (name, usdVal, cls='') => `<div class="hold ${cls}"><span class="who" style="font-weight:400">${name}</span><span class="amts">$${fmt(usdVal,0)}</span></div>`;
+  let bhtml = `<div class="bgroup-h">Food (daily)</div>`
+    + row(`${food.days} days left · ${b.foodNtPerDay}NT × 2/day · TMF &amp; VBS meals excluded`, foodUsd);
+  for (const g of groups) {
+    bhtml += `<div class="bgroup-h">${escapeHtml(g.cat)}</div>`
+      + g.items.map(i => row(escapeHtml(i.name), i.usd)).join('')
+      + (g.items.length > 1 ? `<div class="hold subtotal"><span class="who">${escapeHtml(g.cat)} subtotal</span><span class="amts">$${fmt(g.total,0)}</span></div>` : '');
+  }
+  bhtml += `<div class="hold grand"><span class="who">Planned total</span><span class="amts"><b>$${fmt(planned,0)}</b></span></div>`;
+  $('#budget').innerHTML = bhtml;
 
   // Amount owed = credit-card charges (they never touched cash on hand).
   const owed = { Andrew: { NT: 0, USD: 0 }, Keren: { NT: 0, USD: 0 } };
