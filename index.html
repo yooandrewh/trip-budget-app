@@ -183,7 +183,9 @@
 
 <!-- ============ ANALYSIS ============ -->
 <div class="page" id="page-an">
-  <div class="card"><div class="empty">📊 Coming soon</div></div>
+  <div class="card"><div class="sec-h">Credit owed (to pay later)</div><div id="owed"></div></div>
+  <div class="card"><div class="sec-h">Cash on hand</div><div id="holdings-an"></div></div>
+  <div class="note">Credit charges don't reduce cash on hand — they pile up here as amounts owed. More analysis coming soon…</div>
 </div>
 
 <nav>
@@ -301,7 +303,27 @@ $('#submit').addEventListener('click', async () => {
 });
 
 // ---- render --------------------------------------------------------------------------
-function renderAll() { renderTx(); }
+function renderAll() { renderTx(); renderAnalysis(); }
+
+function renderAnalysis() {
+  if (!DATA) return;
+  // Amount owed = credit-card charges (they never touched cash on hand).
+  const owed = { Andrew: { NT: 0, USD: 0 }, Keren: { NT: 0, USD: 0 } };
+  for (const t of DATA.transactions) {
+    if (t.Payment === 'Credit' && !isFlow(t) && owed[t.Owner]) owed[t.Owner][t.Currency] += Number(t.Amount) || 0;
+  }
+  const usdEq = (o) => o.USD + o.NT / rate();
+  const total = usdEq(owed.Andrew) + usdEq(owed.Keren);
+  $('#owed').innerHTML = ['Andrew','Keren'].map(w => `
+    <div class="hold"><span class="who">${w}</span>
+      <span class="amts">NT$${fmt(owed[w].NT)} <span class="u">· US$${fmt(owed[w].USD,0)} · ≈ $${fmt(usdEq(owed[w]),0)}</span></span></div>`).join('')
+    + `<div class="hold"><span class="who">Total owed</span><span class="amts"><b>≈ $${fmt(total,0)}</b></span></div>`;
+
+  const h = holdings();
+  $('#holdings-an').innerHTML = ['Andrew','Keren'].map(w => `
+    <div class="hold"><span class="who">${w}</span>
+      <span class="amts">NT$${fmt(h[w].NT)} <span class="u">· US$${fmt(h[w].USD,0)}</span></span></div>`).join('');
+}
 
 function holdings() {
   // Cash each person is physically holding, per currency.
