@@ -13,6 +13,9 @@ const budget = {
   tripStart: '2026-07-01',
   tripEnd: '2026-07-14',
   ntPerUsd: 30,
+  foodNtPerDay: 200,
+  tmfStart: '2026-07-06', tmfEnd: '2026-07-10',
+  vbsStart: '2026-07-06', vbsEnd: '2026-07-10',
   startUsd: { Andrew: 6300, Keren: 6300 },
   items: [
     { name: 'TMF', usd: 3156 },
@@ -64,7 +67,7 @@ http.createServer((req, res) => {
     req.on('data', (c) => body += c);
     req.on('end', () => {
       const b = JSON.parse(body || '{}');
-      transactions.push({ Date: b.date, Owner: b.owner, Payment: b.payment, Amount: b.amount, Currency: b.currency, Type: b.type, Notes: b.notes || '', 'Logged At': new Date().toISOString() });
+      transactions.push({ Date: b.date, Owner: b.owner, Payment: b.payment, Amount: b.amount, Currency: b.currency, Type: b.type, To: b.to || '', Received: b.received || '', Notes: b.notes || '', 'Logged At': new Date().toISOString(), Time: b.time || '' });
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ ok: true }));
     });

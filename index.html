@@ -56,7 +56,7 @@
   .cur button { width: 64px; border-radius: 12px; border: 1px solid var(--line); background: var(--card2); color: var(--text); font-weight: 700; }
   .cur button.on { background: var(--blue); border-color: var(--blue); color: #fff; }
 
-  input[type=text], input[type=date] { width: 100%; padding: 12px 14px; border-radius: 12px;
+  input[type=text], input[type=date], input[type=time] { width: 100%; padding: 12px 14px; border-radius: 12px;
     border: 1px solid var(--line); background: var(--card); color: var(--text); font-size: 16px; }
 
   .cond { display: none; }
@@ -68,6 +68,10 @@
   #notif-btn { width: 100%; margin-top: 14px; padding: 13px; border: none; border-radius: 12px;
     background: var(--blue); color: #fff; font-size: 15px; font-weight: 700; }
   #notif-btn:disabled { opacity: .5; }
+  .verdict { border-radius: 16px; padding: 16px; margin-bottom: 12px; font-weight: 700; font-size: 16px; border: 1px solid var(--line); background: var(--card); }
+  .verdict.good { background: rgba(14,164,122,.08); border-color: rgba(14,164,122,.45); color: var(--accent); }
+  .verdict.bad  { background: rgba(214,69,69,.08); border-color: rgba(214,69,69,.45); color: var(--red); }
+  .verdict .d { font-weight: 400; font-size: 13px; color: var(--text); margin-top: 6px; line-height: 1.5; }
   #confirm-box { margin-top: 16px; background: var(--card2); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
   .confirm-sum { font-size: 15px; line-height: 1.6; }
   .confirm-sum b { font-size: 20px; }
@@ -146,8 +150,7 @@
       <label class="f">Payment</label>
       <div class="seg" id="payment">
         <button data-v="Cash" class="on">Cash</button>
-        <button data-v="Credit">Credit</button>
-        <button data-v="Transfer">Transfer</button>
+        <button data-v="Credit">Credit Card</button>
       </div>
     </div>
 
@@ -165,8 +168,11 @@
       <input id="received" type="text" inputmode="decimal" placeholder="0">
     </div>
 
-    <label class="f">Date</label>
-    <input id="date" type="date">
+    <label class="f">Date &amp; time</label>
+    <div class="amt-row">
+      <input id="date" type="date" style="flex:1.4">
+      <input id="time" type="time" style="flex:1">
+    </div>
 
     <label class="f">Notes</label>
     <input id="notes" type="text" placeholder="Optional — what was it?">
@@ -197,17 +203,40 @@
 
 <!-- ============ TRANSACTIONS ============ -->
 <div class="page" id="page-tx">
+  <div class="card">
+    <div class="sec-h" style="display:flex;justify-content:space-between;align-items:center">Cash on hand
+      <button id="rec-toggle" style="border:1px solid var(--line);background:var(--card2);color:var(--text);border-radius:10px;padding:6px 10px;font-size:12px;font-weight:700">⚖️ Reconcile</button>
+    </div>
+    <div id="holdings"></div>
+    <div class="cond" id="rec-form">
+      <div class="note" style="margin:10px 2px 0">Count the cash actually in someone's wallet — the app resets their balance to this and keeps going from there.</div>
+      <label class="f">Whose wallet</label>
+      <div class="seg" id="rec-owner">
+        <button data-v="Andrew" class="on">Andrew</button>
+        <button data-v="Keren">Keren</button>
+      </div>
+      <label class="f">Currency</label>
+      <div class="seg" id="rec-cur">
+        <button data-v="NT" class="on">NT$</button>
+        <button data-v="USD">US$</button>
+      </div>
+      <label class="f">Actual amount on hand</label>
+      <input id="rec-amount" type="text" inputmode="decimal" placeholder="0">
+      <button id="rec-save" style="width:100%;margin-top:14px;padding:13px;border:none;border-radius:12px;background:var(--accent);color:#fff;font-size:15px;font-weight:700">Save count</button>
+      <div id="rec-msg" class="note" style="text-align:center"></div>
+    </div>
+  </div>
   <div class="totals" id="totals"></div>
-  <div class="card"><div class="sec-h">Cash on hand</div><div id="holdings"></div></div>
   <div class="card" id="txlist"><div class="empty">Loading…</div></div>
 </div>
 
 <!-- ============ ANALYSIS ============ -->
 <div class="page" id="page-an">
-  <div class="card"><div class="sec-h">Budget</div><div id="budget"></div></div>
+  <div id="verdict"></div>
   <div class="card"><div class="sec-h">Credit owed (to pay later)</div><div id="owed"></div></div>
   <div class="card"><div class="sec-h">Cash on hand</div><div id="holdings-an"></div></div>
-  <div class="note">Budget items are editable in the “Budget” tab of the Google Sheet (rows starting with “Budget:”). Credit charges don't reduce cash on hand — they show up under credit owed.</div>
+  <div class="card"><div class="sec-h">Tentative budget (what's still ahead)</div><div id="budget"></div></div>
+  <div class="note">Budget items, food rate, and TMF/VBS dates are editable in the “Budget” tab of the Google Sheet. Food skips TMF days (all meals covered Mon night→Fri night) and counts VBS weekday lunches as covered.</div>
 </div>
 
 <nav>
@@ -223,11 +252,16 @@ let DATA = null;
 
 // ---- helpers -------------------------------------------------------------
 const todayISO = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+const nowHM = () => { const d = new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
 $('#date').value = todayISO();
+$('#time').value = nowHM();
 const fmt = (n, dec=0) => Number(n).toLocaleString('en-US', {maximumFractionDigits: dec, minimumFractionDigits: 0});
 const rate = () => DATA?.budget?.ntPerUsd || 30;
 const usd = (t) => t.Currency === 'USD' ? Number(t.Amount) : Number(t.Amount) / rate();
-const isFlow = (t) => t.Type === 'Exchange' || t.Type === 'Transfer';
+const isFlow = (t) => t.Type === 'Exchange' || t.Type === 'Transfer' || t.Type === 'Reconcile';
+// Chronology key: entry date + edited time (legacy rows fall back to save time), save time as tiebreak.
+const timeOf = (t) => t.Time || (t['Logged At'] ? new Date(t['Logged At']).toTimeString().slice(0,5) : '00:00');
+const chrono = (t) => t.Date + 'T' + timeOf(t) + '|' + (t['Logged At'] || '');
 
 // ---- segmented controls -----------------------------------------------------
 function wireSeg(id, key, after) {
@@ -335,7 +369,7 @@ function buildBody() {
     msg.className='err'; msg.textContent = 'Enter the NT$ you received'; return null;
   }
   const type = state.kind;
-  return { date: $('#date').value || todayISO(), owner: state.owner,
+  return { date: $('#date').value || todayISO(), time: $('#time').value || nowHM(), owner: state.owner,
     payment: state.kind === 'Spend' ? state.payment : 'Cash',
     amount, currency: state.currency, type,
     tag: '',
@@ -353,7 +387,7 @@ $('#submit').addEventListener('click', () => {
   if (body.type === 'Exchange') line = `💱 <b>${cur}${fmt(body.amount,2)}</b> → NT$${fmt(body.received)} (${body.owner})`;
   else if (body.type === 'Transfer') line = `↔︎ ${body.owner} gives <b>${cur}${fmt(body.amount,2)}</b> to ${body.to}`;
   else line = `<b>${cur}${fmt(body.amount,2)}</b> · ${body.owner} · ${body.payment}`;
-  $('#confirm-sum').innerHTML = line + `<br>${body.date}${body.notes ? ' · ' + escapeHtml(body.notes) : ''}`;
+  $('#confirm-sum').innerHTML = line + `<br>${body.date} ${body.time}${body.notes ? ' · ' + escapeHtml(body.notes) : ''}`;
   $('#msg').className = ''; $('#msg').textContent = '';
   $('#submit').style.display = 'none';
   $('#confirm-box').classList.add('show');
@@ -378,16 +412,51 @@ $('#confirm-yes').addEventListener('click', async () => {
     if (!r.ok) throw new Error(d.error || r.status);
     msg.className='ok'; msg.textContent = '✓ Saved ' + (body.currency==='NT'?'NT$':'US$') + fmt(body.amount,2) + ' — ' + body.type;
     $('#amount').value=''; $('#notes').value=''; $('#received').value='';
+    $('#time').value = nowHM();
     if (DATA) {
       DATA.transactions.push({ Date: body.date, Owner: body.owner, Payment: body.payment, Amount: body.amount,
         Currency: body.currency, Type: body.type, Tag: body.tag, To: body.to, Received: body.received,
-        Notes: body.notes, 'Logged At': new Date().toISOString() });
+        Notes: body.notes, 'Logged At': new Date().toISOString(), Time: body.time });
       renderAll();
     }
     load();   // pull the authoritative copy back from the sheet
   } catch (e) { msg.className='err'; msg.textContent = '✗ ' + e.message; }
   $('#submit').disabled = false;
   pendingBody = null;
+});
+
+// ---- reconcile ---------------------------------------------------------------------
+const rec = { owner: 'Andrew', cur: 'NT' };
+$('#rec-toggle').addEventListener('click', () => $('#rec-form').classList.toggle('show'));
+$('#rec-owner').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.querySelectorAll('#rec-owner button').forEach(x => x.classList.toggle('on', x === b));
+  rec.owner = b.dataset.v;
+});
+$('#rec-cur').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.querySelectorAll('#rec-cur button').forEach(x => x.classList.toggle('on', x === b));
+  rec.cur = b.dataset.v;
+});
+$('#rec-save').addEventListener('click', async () => {
+  const amount = parseFloat(($('#rec-amount').value || '').replace(/,/g,''));
+  const m = $('#rec-msg');
+  if (!isFinite(amount) || amount < 0) { m.textContent = 'Enter the counted amount'; return; }
+  const cur = rec.cur === 'NT' ? 'NT$' : 'US$';
+  if (!confirm(`Set ${rec.owner}'s ${cur} on hand to ${cur}${fmt(amount,2)}?`)) return;
+  $('#rec-save').disabled = true; m.textContent = 'Saving…';
+  try {
+    const body = { date: todayISO(), time: nowHM(), owner: rec.owner, payment: 'Cash',
+      amount, currency: rec.cur, type: 'Reconcile', notes: 'Cash count' };
+    const r = await fetch('/api/transactions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || r.status);
+    m.textContent = '✓ Balance set';
+    $('#rec-amount').value = '';
+    $('#rec-form').classList.remove('show');
+    load();
+  } catch (e) { m.textContent = '✗ ' + e.message; }
+  $('#rec-save').disabled = false;
 });
 
 // ---- delete -----------------------------------------------------------------------
@@ -407,20 +476,57 @@ async function deleteTx(loggedAt, label) {
 // ---- render --------------------------------------------------------------------------
 function renderAll() { renderTx(); renderAnalysis(); }
 
+// Tentative food cost for the REMAINING days of the trip (today onward).
+// TMF covers all meals from Mon night to Fri night: the start day only needs
+// breakfast+lunch (2/3 of a day), days after that through TMF End are fully
+// covered. VBS covers weekday lunches (1/3 of a day) outside TMF.
+function foodRemaining() {
+  const b = DATA.budget;
+  if (!b.tripStart || !b.tripEnd) return { nt: 0, days: 0 };
+  const perDay = (b.foodNtPerDay || 200) * 2;   // two people
+  const from = todayISO() > b.tripStart ? todayISO() : b.tripStart;
+  let nt = 0, days = 0;
+  for (let d = new Date(from + 'T12:00'); ; d.setDate(d.getDate() + 1)) {
+    const iso = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    if (iso > b.tripEnd) break;
+    days++;
+    let frac = 1;
+    if (b.tmfStart && b.tmfEnd && iso >= b.tmfStart && iso <= b.tmfEnd) {
+      frac = iso === b.tmfStart ? 2/3 : 0;
+    } else if (b.vbsStart && b.vbsEnd && iso >= b.vbsStart && iso <= b.vbsEnd) {
+      const dow = d.getDay();
+      if (dow >= 1 && dow <= 5) frac = 2/3;
+    }
+    nt += perDay * frac;
+  }
+  return { nt, days };
+}
+
 function renderAnalysis() {
   if (!DATA) return;
-  // Tentative budget: earmarked items vs. trip funds vs. actual spending.
+  // Everything already spent is in "spent"; everything still ahead is planned
+  // (fixed items + remaining food). No double counting.
   const b = DATA.budget, items = b.items || [];
-  const planned = items.reduce((s, i) => s + i.usd, 0);
   const funds = (b.startUsd?.Andrew || 0) + (b.startUsd?.Keren || 0);
   const spent = DATA.transactions.filter(t => !isFlow(t)).reduce((s, t) => s + usd(t), 0);
-  const remaining = funds - planned - spent;
-  $('#budget').innerHTML = items.map(i => `
+  const food = foodRemaining();
+  const foodUsd = food.nt / rate();
+  const planned = items.reduce((s, i) => s + i.usd, 0) + foodUsd;
+  const leftover = funds - spent - planned;
+
+  const ok = leftover >= 0;
+  $('#verdict').innerHTML = `<div class="verdict ${ok ? 'good' : 'bad'}">${ok ? '✅ On track' : '🚨 Over budget'}
+    <div class="d">Funds <b>$${fmt(funds)}</b> − spent <b>$${fmt(spent,0)}</b> − still planned <b>$${fmt(planned,0)}</b>
+    (incl. NT$${fmt(food.nt)} food for the ${food.days} days left) = <b>$${fmt(leftover,0)}</b> ${ok ? 'to spare' : 'short'}.</div></div>`;
+
+  $('#budget').innerHTML =
+    `<div class="hold"><span class="who" style="font-weight:400">Food · ${food.days} days left (${b.foodNtPerDay}NT × 2, TMF/VBS meals excluded)</span><span class="amts">$${fmt(foodUsd,0)}</span></div>`
+    + items.map(i => `
     <div class="hold"><span class="who" style="font-weight:400">${escapeHtml(i.name)}</span><span class="amts">$${fmt(i.usd)}</span></div>`).join('')
-    + `<div class="hold"><span class="who">Planned total</span><span class="amts"><b>$${fmt(planned)}</b></span></div>
+    + `<div class="hold"><span class="who">Planned total</span><span class="amts"><b>$${fmt(planned,0)}</b></span></div>
        <div class="hold"><span class="who">Spent so far</span><span class="amts"><b>$${fmt(spent,0)}</b></span></div>
        <div class="hold"><span class="who">Trip funds</span><span class="amts"><b>$${fmt(funds)}</b></span></div>
-       <div class="hold"><span class="who" style="font-size:17px">Remaining</span><span class="amts" style="font-size:17px"><b style="color:${remaining >= 0 ? 'var(--accent)' : 'var(--red)'}">$${fmt(remaining,0)}</b></span></div>`;
+       <div class="hold"><span class="who" style="font-size:17px">Left over if all goes to plan</span><span class="amts" style="font-size:17px"><b style="color:${ok ? 'var(--accent)' : 'var(--red)'}">$${fmt(leftover,0)}</b></span></div>`;
 
   // Amount owed = credit-card charges (they never touched cash on hand).
   const owed = { Andrew: { NT: 0, USD: 0 }, Keren: { NT: 0, USD: 0 } };
@@ -453,13 +559,18 @@ function cashGridHtml() {
 }
 
 function holdings() {
-  // Cash each person is physically holding, per currency.
+  // Cash each person is physically holding, per currency. Processed in
+  // chronological order so a Reconcile entry resets the balance to the counted
+  // amount and later entries build on top of it.
   const h = { Andrew: { USD: DATA?.budget?.startUsd?.Andrew || 0, NT: 0 },
               Keren:  { USD: DATA?.budget?.startUsd?.Keren  || 0, NT: 0 } };
-  for (const t of DATA?.transactions || []) {
+  const ordered = (DATA?.transactions || []).slice().sort((a, b) => chrono(a).localeCompare(chrono(b)));
+  for (const t of ordered) {
     const o = h[t.Owner]; if (!o) continue;
     const amt = Number(t.Amount) || 0;
-    if (t.Type === 'Exchange') {
+    if (t.Type === 'Reconcile') {
+      o[t.Currency] = amt;
+    } else if (t.Type === 'Exchange') {
       o[t.Currency] -= amt;
       o.NT += Number(t.Received) || amt * rate();
     } else if (t.Type === 'Transfer') {
@@ -474,7 +585,7 @@ function holdings() {
 
 function renderTx() {
   if (!DATA) return;
-  const txs = DATA.transactions.slice().sort((a,b) => (b.Date + (b['Logged At']||'')).localeCompare(a.Date + (a['Logged At']||'')));
+  const txs = DATA.transactions.slice().sort((a,b) => chrono(b).localeCompare(chrono(a)));
   const spends = txs.filter(t => !isFlow(t));
   const totNT = spends.filter(t=>t.Currency==='NT').reduce((s,t)=>s+Number(t.Amount),0);
   const totUSD = spends.filter(t=>t.Currency==='USD').reduce((s,t)=>s+Number(t.Amount),0);
@@ -498,7 +609,10 @@ function renderTx() {
       lastDay = t.Date;
     }
     let title, sub;
-    if (t.Type === 'Exchange') {
+    if (t.Type === 'Reconcile') {
+      title = `⚖️ ${t.Owner}'s ${t.Currency === 'NT' ? 'NT$' : 'US$'} set to ${fmt(t.Amount,2)}`;
+      sub = `cash count`;
+    } else if (t.Type === 'Exchange') {
       title = `💱 Exchange → NT$${fmt(t.Received)}`;
       sub = `${t.Owner} · swapped ${t.Currency==='NT'?'NT$':'US$'}${fmt(t.Amount)}`;
     } else if (t.Type === 'Transfer') {
@@ -511,7 +625,8 @@ function renderTx() {
       title = (label ? label + tag + (notes ? ' · ' + notes : '') : (notes || 'Spend') + tag);
       sub = `${t.Owner} · ${t.Payment}`;
     }
-    const time = t['Logged At'] ? new Date(t['Logged At']).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : '';
+    const hm = timeOf(t);
+    const time = hm ? new Date('2000-01-01T' + hm).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : '';
     html += `<div class="tx${isFlow(t)?' flow':''}">
       <div class="l"><div class="t">${title}</div><div class="s">${sub}${time ? ' · ' + time : ''}</div></div>
       <div class="r"><div class="a">${t.Currency==='NT'?'NT$':'US$'}${fmt(t.Amount,2)}</div>

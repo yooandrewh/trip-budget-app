@@ -167,13 +167,18 @@ export async function deleteRow(tab, rowNumber) {
 // Budget tab with editable defaults. Safe to call every time: it only adds
 // what is missing.
 
-export const TX_HEADER = ['Date', 'Owner', 'Payment', 'Amount', 'Currency', 'Type', 'Tag', 'To', 'Received', 'Notes', 'Logged At'];
+export const TX_HEADER = ['Date', 'Owner', 'Payment', 'Amount', 'Currency', 'Type', 'Tag', 'To', 'Received', 'Notes', 'Logged At', 'Time'];
 
 export const BUDGET_DEFAULTS = [
   ['Setting', 'Value'],
   ['Trip Start', '2026-07-01'],
   ['Trip End', '2026-07-14'],
   ['NT per USD', 30],
+  ['Food NT per person per day', 200],
+  ['TMF Start', '2026-07-06'],
+  ['TMF End', '2026-07-10'],
+  ['VBS Start', '2026-07-06'],
+  ['VBS End', '2026-07-10'],
   ['Start USD: Andrew', 6300],
   ['Start USD: Keren', 6300],
   ['Budget: TMF', 3156],

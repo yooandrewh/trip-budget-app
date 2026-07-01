@@ -18,7 +18,10 @@ export default async function handler(req, res) {
   try {
     const b = req.body || {};
     const amount = Number(b.amount);
-    if (!isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'Bad amount' });
+    // Reconcile may legitimately set a balance to 0; everything else must be > 0.
+    if (!isFinite(amount) || amount < 0 || (amount === 0 && b.type !== 'Reconcile')) {
+      return res.status(400).json({ error: 'Bad amount' });
+    }
     if (!OWNERS.includes(b.owner)) return res.status(400).json({ error: 'Bad owner' });
     if (!PAYMENTS.includes(b.payment)) return res.status(400).json({ error: 'Bad payment' });
     if (!CURRENCIES.includes(b.currency)) return res.status(400).json({ error: 'Bad currency' });
@@ -43,6 +46,7 @@ export default async function handler(req, res) {
       'Received': b.type === 'Exchange' ? received : '',
       'Notes': String(b.notes || '').slice(0, 500),
       'Logged At': new Date().toISOString(),
+      'Time': /^\d{2}:\d{2}$/.test(b.time || '') ? b.time : '',
     });
 
     // Ping the other person's phone(s). Best-effort: a push failure must never
@@ -54,6 +58,7 @@ export default async function handler(req, res) {
         let text;
         if (b.type === 'Exchange') text = `${b.owner} exchanged ${cur}${n(amount)} → NT$${n(received)}`;
         else if (b.type === 'Transfer') text = `${b.owner} gave ${b.to} ${cur}${n(amount)}`;
+        else if (b.type === 'Reconcile') text = `${b.owner} counted ${cur}${n(amount)} cash on hand`;
         else text = `${b.owner} spent ${cur}${n(amount)}${b.notes ? ' · ' + b.notes : ''}`;
         const subs = (await getRows('Subs')).rows.filter((s) => s.Endpoint && s.Owner !== b.owner);
         await Promise.allSettled(subs.map((s) =>
