@@ -11,9 +11,10 @@ export default async function handler(req, res) {
     const settings = {};
     for (const row of budget.rows) settings[row['Setting']] = row['Value'];
 
-    const categories = {};
+    const categories = {}, startUsd = {};
     for (const [k, v] of Object.entries(settings)) {
       if (k && k.startsWith('Budget: ')) categories[k.slice(8)] = Number(v) || 0;
+      if (k && k.startsWith('Start USD: ')) startUsd[k.slice(11)] = Number(v) || 0;
     }
 
     res.status(200).json({
@@ -22,6 +23,7 @@ export default async function handler(req, res) {
         tripStart: settings['Trip Start'] || '',
         tripEnd: settings['Trip End'] || '',
         ntPerUsd: Number(settings['NT per USD']) || 30,
+        startUsd,
         categories,
       },
     });

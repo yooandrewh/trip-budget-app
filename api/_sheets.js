@@ -126,13 +126,15 @@ export async function appendRow(tab, obj) {
 // Budget tab with editable defaults. Safe to call every time: it only adds
 // what is missing.
 
-export const TX_HEADER = ['Date', 'Owner', 'Payment', 'Amount', 'Currency', 'Type', 'Notes', 'Logged At'];
+export const TX_HEADER = ['Date', 'Owner', 'Payment', 'Amount', 'Currency', 'Type', 'Tag', 'To', 'Received', 'Notes', 'Logged At'];
 
 export const BUDGET_DEFAULTS = [
   ['Setting', 'Value'],
-  ['Trip Start', '2026-07-15'],
-  ['Trip End', '2026-07-29'],
+  ['Trip Start', '2026-07-01'],
+  ['Trip End', '2026-07-14'],
   ['NT per USD', 30],
+  ['Start USD: Andrew', 6300],
+  ['Start USD: Keren', 6300],
   ['Budget: Food', 800],
   ['Budget: Transport', 400],
   ['Budget: Lodging', 1500],

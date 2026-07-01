@@ -10,16 +10,22 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const port = Number(process.argv[2]) || 3210;
 
 const budget = {
-  tripStart: '2026-06-28',
-  tripEnd: '2026-07-12',
+  tripStart: '2026-07-01',
+  tripEnd: '2026-07-14',
   ntPerUsd: 30,
+  startUsd: { Andrew: 6300, Keren: 6300 },
   categories: { Food: 800, Transport: 400, Lodging: 1500, Shopping: 500, Activities: 400, Gifts: 200, Other: 200 },
 };
+// Real transactions so far (also seeded into the sheet by scripts/seed.mjs).
 const transactions = [
-  { Date: '2026-06-28', Owner: 'Andrew', Payment: 'Credit', Amount: 5200, Currency: 'NT', Type: 'Lodging', Notes: 'Taipei hotel night 1', 'Logged At': '2026-06-28T10:00:00Z' },
-  { Date: '2026-06-29', Owner: 'Keren', Payment: 'Cash', Amount: 350, Currency: 'NT', Type: 'Food', Notes: 'Din Tai Fung', 'Logged At': '2026-06-29T03:10:00Z' },
-  { Date: '2026-06-29', Owner: 'Andrew', Payment: 'Cash', Amount: 120, Currency: 'NT', Type: 'Transport', Notes: 'MRT cards', 'Logged At': '2026-06-29T05:00:00Z' },
-  { Date: '2026-07-01', Owner: 'Keren', Payment: 'Credit', Amount: 64, Currency: 'USD', Type: 'Shopping', Notes: '', 'Logged At': '2026-07-01T12:00:00Z' },
+  { Date: '2026-07-02', Owner: 'Andrew', Payment: 'Cash', Amount: 2000, Currency: 'USD', Type: 'Exchange', Tag: '', To: '', Received: 60000, Notes: 'USD → TWD (EDIT: actual NT$ received)', 'Logged At': '2026-07-02T00:01:00Z' },
+  { Date: '2026-07-02', Owner: 'Andrew', Payment: 'Cash', Amount: 3000, Currency: 'NT', Type: 'Transfer', Tag: '', To: 'Keren', Received: '', Notes: '', 'Logged At': '2026-07-02T00:02:00Z' },
+  { Date: '2026-07-02', Owner: 'Andrew', Payment: 'Credit', Amount: 1040, Currency: 'NT', Type: 'Food', Tag: 'Breakfast', To: '', Received: '', Notes: 'Eggs for Thursday breakfast (Amex)', 'Logged At': '2026-07-02T00:03:00Z' },
+  { Date: '2026-07-02', Owner: 'Andrew', Payment: 'Cash', Amount: 720, Currency: 'NT', Type: 'Food', Tag: 'Lunch', To: '', Received: '', Notes: 'Baike two pek fried chicken filet', 'Logged At': '2026-07-02T00:04:00Z' },
+  { Date: '2026-07-02', Owner: 'Keren', Payment: 'Cash', Amount: 600, Currency: 'NT', Type: 'Food', Tag: 'Lunch', To: '', Received: '', Notes: 'Bao', 'Logged At': '2026-07-02T00:05:00Z' },
+  { Date: '2026-07-02', Owner: 'Andrew', Payment: 'Cash', Amount: 160, Currency: 'NT', Type: 'Food', Tag: 'Snack', To: '', Received: '', Notes: 'Mandoo', 'Logged At': '2026-07-02T00:06:00Z' },
+  { Date: '2026-07-02', Owner: 'Andrew', Payment: 'Cash', Amount: 640, Currency: 'NT', Type: 'Food', Tag: 'Drinks', To: '', Received: '', Notes: 'Drinks', 'Logged At': '2026-07-02T00:07:00Z' },
+  { Date: '2026-07-02', Owner: 'Andrew', Payment: 'Cash', Amount: 200, Currency: 'NT', Type: 'Food', Tag: 'Snack', To: '', Received: '', Notes: 'Fried sweet potato ball', 'Logged At': '2026-07-02T00:08:00Z' },
 ];
 
 http.createServer((req, res) => {
