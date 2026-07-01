@@ -244,7 +244,7 @@
   <div class="card"><div class="sec-h">Credit owed (to pay later)</div><div id="owed"></div></div>
   <div class="card"><div class="sec-h">Cash on hand</div><div id="holdings-an"></div></div>
   <div class="card"><div class="sec-h">Tentative budget (what's still ahead)</div><div id="budget"></div></div>
-  <div class="note">Budget items, food rate, and TMF/VBS dates are editable in the “Budget” tab of the Google Sheet. Food skips TMF days (all meals covered Mon night→Fri night) and counts VBS weekday lunches as covered.</div>
+  <div class="note">Budget items, food rate, team size (“People”), trip dates and TMF/VBS dates are editable in the “Budget” tab of the Google Sheet. Food skips TMF days (all meals covered Mon night→Fri night) and counts VBS weekday lunches as covered.</div>
 </div>
 
 <nav>
@@ -484,19 +484,19 @@ async function deleteTx(loggedAt, label) {
 // ---- render --------------------------------------------------------------------------
 function renderAll() { renderTx(); renderAnalysis(); }
 
-// Tentative food cost for the REMAINING days of the trip (today onward).
-// TMF covers all meals from Mon night to Fri night: the start day only needs
-// breakfast+lunch (2/3 of a day), days after that through TMF End are fully
-// covered. VBS covers weekday lunches (1/3 of a day) outside TMF.
-function foodRemaining() {
+// Cumulative food cost for the WHOLE trip: 200NT per person per day for the
+// whole team, day by day. TMF covers all meals from Mon night to Fri night:
+// the start day only needs breakfast+lunch (2/3 of a day), days after that
+// through TMF End are fully covered. VBS covers weekday lunches (1/3 of a day)
+// outside TMF.
+function foodBetween(from, to) {
   const b = DATA.budget;
-  if (!b.tripStart || !b.tripEnd) return { nt: 0, days: 0 };
-  const perDay = (b.foodNtPerDay || 200) * 2;   // two people
-  const from = todayISO() > b.tripStart ? todayISO() : b.tripStart;
+  if (!from || !to || from > to) return { nt: 0, days: 0 };
+  const perDay = (b.foodNtPerDay || 200) * (b.people || 14);
   let nt = 0, days = 0;
   for (let d = new Date(from + 'T12:00'); ; d.setDate(d.getDate() + 1)) {
     const iso = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-    if (iso > b.tripEnd) break;
+    if (iso > to) break;
     days++;
     let frac = 1;
     if (b.tmfStart && b.tmfEnd && iso >= b.tmfStart && iso <= b.tmfEnd) {
@@ -512,22 +512,30 @@ function foodRemaining() {
 
 function renderAnalysis() {
   if (!DATA) return;
-  // Everything already spent is in "spent"; everything still ahead is planned
-  // (fixed items + remaining food). No double counting.
+  // Day-aware view: today decides how much of the food budget is still ahead.
+  // Projected leftover = funds − spent so far − (fixed items + food for the
+  // days that are left). The budget card below shows the cumulative whole-trip
+  // food total for reference.
   const b = DATA.budget, items = b.items || [];
   const funds = (b.startUsd?.Andrew || 0) + (b.startUsd?.Keren || 0);
   const spent = DATA.transactions.filter(t => !isFlow(t)).reduce((s, t) => s + usd(t), 0);
-  const food = foodRemaining();
+  const food = foodBetween(b.tripStart, b.tripEnd);                       // whole trip (cumulative)
+  const fromToday = todayISO() > b.tripStart ? todayISO() : b.tripStart;
+  const foodAhead = todayISO() > b.tripEnd ? { nt: 0, days: 0 } : foodBetween(fromToday, b.tripEnd);
   const foodUsd = food.nt / rate();
-  const planned = items.reduce((s, i) => s + i.usd, 0) + foodUsd;
-  const leftover = funds - spent - planned;
+  const itemsUsd = items.reduce((s, i) => s + i.usd, 0);
+  const planned = itemsUsd + foodUsd;                                      // cumulative budget
+  const stillAhead = itemsUsd + foodAhead.nt / rate();
+  const leftover = funds - spent - stillAhead;
+  const dayOfTrip = Math.min(Math.max(food.days - foodAhead.days + 1, 1), food.days);
 
   const ok = leftover >= 0;
   $('#verdict').innerHTML = `<div class="verdict ${ok ? 'good' : 'bad'}">
     <div class="funds-top"><span>Trip funds</span><span>$${fmt(funds)}</span></div>
     <div class="funds-row"><span>− Spent so far</span><span>$${fmt(spent,0)}</span></div>
-    <div class="funds-row"><span>− Still planned (incl. food)</span><span>$${fmt(planned,0)}</span></div>
-    <div class="funds-row total"><span>${ok ? '✅ Left over' : '🚨 Short'}</span><span>$${fmt(Math.abs(leftover),0)}</span></div>
+    <div class="funds-row"><span>− Still ahead (items + food × ${foodAhead.days} days left)</span><span>$${fmt(stillAhead,0)}</span></div>
+    <div class="funds-row total"><span>${ok ? '✅ Projected leftover' : '🚨 Projected short'}</span><span>$${fmt(Math.abs(leftover),0)}</span></div>
+    <div class="funds-row" style="margin-top:6px"><span>Day ${dayOfTrip} of ${food.days}</span><span>${foodAhead.days} days left</span></div>
   </div>`;
 
   // Grouped budget: Food first, then each sheet category with a subtotal.
@@ -538,14 +546,15 @@ function renderAnalysis() {
     g.items.push(i); g.total += i.usd;
   }
   const row = (name, usdVal, cls='') => `<div class="hold ${cls}"><span class="who" style="font-weight:400">${name}</span><span class="amts">$${fmt(usdVal,0)}</span></div>`;
-  let bhtml = `<div class="bgroup-h">Food (daily)</div>`
-    + row(`${food.days} days left · ${b.foodNtPerDay}NT × 2/day · TMF &amp; VBS meals excluded`, foodUsd);
+  let bhtml = `<div class="bgroup-h">Food (whole trip, cumulative)</div>`
+    + row(`${food.days} days × ${b.foodNtPerDay}NT × ${b.people} people · TMF &amp; VBS covered meals excluded · NT$${fmt(food.nt)}`, foodUsd);
   for (const g of groups) {
     bhtml += `<div class="bgroup-h">${escapeHtml(g.cat)}</div>`
       + g.items.map(i => row(escapeHtml(i.name), i.usd)).join('')
       + (g.items.length > 1 ? `<div class="hold subtotal"><span class="who">${escapeHtml(g.cat)} subtotal</span><span class="amts">$${fmt(g.total,0)}</span></div>` : '');
   }
-  bhtml += `<div class="hold grand"><span class="who">Planned total (food + all items)</span><span class="amts"><b>$${fmt(planned,0)}</b></span></div>`;
+  bhtml += `<div class="hold grand"><span class="who">Total trip budget (food + all items)</span><span class="amts"><b>$${fmt(planned,0)}</b></span></div>
+    <div class="hold subtotal"><span class="who">vs. trip funds $${fmt(funds)}</span><span class="amts">${funds - planned >= 0 ? '$' + fmt(funds - planned, 0) + ' unallocated' : '$' + fmt(planned - funds, 0) + ' over'}</span></div>`;
   $('#budget').innerHTML = bhtml;
 
   // Amount owed = credit-card charges (they never touched cash on hand).

@@ -33,6 +33,7 @@ export default async function handler(req, res) {
         tripEnd: settings['Trip End'] || '',
         ntPerUsd: Number(settings['NT per USD']) || 30,
         foodNtPerDay: Number(settings['Food NT per person per day']) || 200,
+        people: Number(settings['People']) || 14,
         tmfStart: settings['TMF Start'] || '',
         tmfEnd: settings['TMF End'] || '',
         vbsStart: settings['VBS Start'] || '',

@@ -172,9 +172,10 @@ export const TX_HEADER = ['Date', 'Owner', 'Payment', 'Amount', 'Currency', 'Typ
 export const BUDGET_DEFAULTS = [
   ['Setting', 'Value'],
   ['Trip Start', '2026-07-01'],
-  ['Trip End', '2026-07-14'],
+  ['Trip End', '2026-07-31'],
   ['NT per USD', 30],
   ['Food NT per person per day', 200],
+  ['People', 14],
   ['TMF Start', '2026-07-06'],
   ['TMF End', '2026-07-10'],
   ['VBS Start', '2026-07-06'],
