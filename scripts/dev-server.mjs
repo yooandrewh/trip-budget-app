@@ -14,7 +14,13 @@ const budget = {
   tripEnd: '2026-07-14',
   ntPerUsd: 30,
   startUsd: { Andrew: 6300, Keren: 6300 },
-  categories: { Food: 800, Transport: 400, Lodging: 1500, Shopping: 500, Activities: 400, Gifts: 200, Other: 200 },
+  items: [
+    { name: 'TMF', usd: 3156 },
+    { name: 'Hot springs', usd: 652 },
+    { name: 'Take home to KCM', usd: 4000 },
+    { name: 'Offering Church', usd: 1000 },
+    { name: 'Honorarium LP', usd: 1000 },
+  ],
 };
 // Real transactions so far (also seeded into the sheet by scripts/seed.mjs).
 const transactions = [
@@ -36,6 +42,18 @@ http.createServer((req, res) => {
   if (req.url.startsWith('/api/subscribe')) {
     res.setHeader('Content-Type', 'application/json');
     return res.end(JSON.stringify({ ok: true }));
+  }
+  if (req.url.startsWith('/api/delete') && req.method === 'POST') {
+    let body = '';
+    req.on('data', (c) => body += c);
+    req.on('end', () => {
+      const { loggedAt } = JSON.parse(body || '{}');
+      const i = transactions.findIndex((t) => t['Logged At'] === loggedAt);
+      if (i >= 0) transactions.splice(i, 1);
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(i >= 0 ? { ok: true } : { error: 'Not found' }));
+    });
+    return;
   }
   if (req.url === '/manifest.json' || req.url === '/sw.js') {
     res.setHeader('Content-Type', req.url === '/sw.js' ? 'text/javascript' : 'application/json');

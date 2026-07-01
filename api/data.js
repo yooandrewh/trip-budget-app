@@ -11,10 +11,11 @@ export default async function handler(req, res) {
     const settings = {};
     for (const row of budget.rows) settings[row['Setting']] = row['Value'];
 
-    const categories = {}, startUsd = {};
-    for (const [k, v] of Object.entries(settings)) {
-      if (k && k.startsWith('Budget: ')) categories[k.slice(8)] = Number(v) || 0;
-      if (k && k.startsWith('Start USD: ')) startUsd[k.slice(11)] = Number(v) || 0;
+    const items = [], startUsd = {};
+    for (const row of budget.rows) {
+      const k = row['Setting'];
+      if (k && String(k).startsWith('Budget: ')) items.push({ name: String(k).slice(8), usd: Number(row['Value']) || 0 });
+      if (k && String(k).startsWith('Start USD: ')) startUsd[String(k).slice(11)] = Number(row['Value']) || 0;
     }
 
     res.status(200).json({
@@ -24,7 +25,7 @@ export default async function handler(req, res) {
         tripEnd: settings['Trip End'] || '',
         ntPerUsd: Number(settings['NT per USD']) || 30,
         startUsd,
-        categories,
+        items,
       },
       vapidPublicKey: process.env.VAPID_PUBLIC_KEY || '',
     });

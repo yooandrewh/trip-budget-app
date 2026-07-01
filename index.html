@@ -68,6 +68,11 @@
   #notif-btn { width: 100%; margin-top: 14px; padding: 13px; border: none; border-radius: 12px;
     background: var(--blue); color: #fff; font-size: 15px; font-weight: 700; }
   #notif-btn:disabled { opacity: .5; }
+  #confirm-box { margin-top: 16px; background: var(--card2); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+  .confirm-sum { font-size: 15px; line-height: 1.6; }
+  .confirm-sum b { font-size: 20px; }
+  #confirm-yes.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tx .del { border: none; background: none; color: var(--dim); font-size: 16px; padding: 8px 0 8px 12px; }
   #msg { text-align: center; margin-top: 10px; font-size: 14px; min-height: 20px; }
   #msg.ok { color: var(--accent); } #msg.err { color: var(--red); }
 
@@ -167,7 +172,26 @@
     <input id="notes" type="text" placeholder="Optional — what was it?">
 
     <button id="submit">Add transaction</button>
+    <div class="cond" id="confirm-box">
+      <div class="confirm-sum" id="confirm-sum"></div>
+      <div class="seg" style="margin-top:10px">
+        <button id="confirm-no">Cancel</button>
+        <button id="confirm-yes" class="on">✓ Confirm</button>
+      </div>
+    </div>
     <div id="msg"></div>
+  </div>
+
+  <div class="card">
+    <div class="sec-h">Notifications</div>
+    <div class="note" style="margin-top:0">Get a ping on this phone when the other person logs a transaction. On iPhone: add this app to your Home Screen first, then enable from inside it.</div>
+    <label class="f">This phone is</label>
+    <div class="seg" id="notif-owner">
+      <button data-v="Andrew" class="on">Andrew</button>
+      <button data-v="Keren">Keren</button>
+    </div>
+    <button id="notif-btn">Enable notifications</button>
+    <div id="notif-status" class="note" style="text-align:center"></div>
   </div>
 </div>
 
@@ -180,20 +204,10 @@
 
 <!-- ============ ANALYSIS ============ -->
 <div class="page" id="page-an">
+  <div class="card"><div class="sec-h">Budget</div><div id="budget"></div></div>
   <div class="card"><div class="sec-h">Credit owed (to pay later)</div><div id="owed"></div></div>
   <div class="card"><div class="sec-h">Cash on hand</div><div id="holdings-an"></div></div>
-  <div class="card">
-    <div class="sec-h">Notifications</div>
-    <div class="note" style="margin-top:0">Get a ping on this phone when the other person logs a transaction. On iPhone: add this app to your Home Screen first, then enable from inside it.</div>
-    <label class="f">This phone is</label>
-    <div class="seg" id="notif-owner">
-      <button data-v="Andrew" class="on">Andrew</button>
-      <button data-v="Keren">Keren</button>
-    </div>
-    <button id="notif-btn">Enable notifications</button>
-    <div id="notif-status" class="note" style="text-align:center"></div>
-  </div>
-  <div class="note">Credit charges don't reduce cash on hand — they pile up here as amounts owed. More analysis coming soon…</div>
+  <div class="note">Budget items are editable in the “Budget” tab of the Google Sheet (rows starting with “Budget:”). Credit charges don't reduce cash on hand — they show up under credit owed.</div>
 </div>
 
 <nav>
@@ -309,32 +323,63 @@ $('#notif-btn').addEventListener('click', async () => {
   $('#notif-btn').disabled = false;
 });
 
-// ---- submit ------------------------------------------------------------------------
-$('#submit').addEventListener('click', async () => {
+// ---- submit (two-step: review, then confirm) -----------------------------------------
+let pendingBody = null;
+
+function buildBody() {
   const amount = parseFloat(($('#amount').value || '').replace(/,/g,''));
   const received = parseFloat(($('#received').value || '').replace(/,/g,''));
   const msg = $('#msg');
-  if (!isFinite(amount) || amount <= 0) { msg.className='err'; msg.textContent = 'Enter an amount'; return; }
+  if (!isFinite(amount) || amount <= 0) { msg.className='err'; msg.textContent = 'Enter an amount'; return null; }
   if (state.kind === 'Exchange' && !(isFinite(received) && received > 0)) {
-    msg.className='err'; msg.textContent = 'Enter the NT$ you received'; return;
+    msg.className='err'; msg.textContent = 'Enter the NT$ you received'; return null;
   }
   const type = state.kind;
-  const body = { date: $('#date').value || todayISO(), owner: state.owner,
+  return { date: $('#date').value || todayISO(), owner: state.owner,
     payment: state.kind === 'Spend' ? state.payment : 'Cash',
     amount, currency: state.currency, type,
     tag: '',
     to: type === 'Transfer' ? state.to : '',
     received: type === 'Exchange' ? received : '',
     notes: $('#notes').value.trim() };
+}
+
+$('#submit').addEventListener('click', () => {
+  const body = buildBody();
+  if (!body) return;
+  pendingBody = body;
+  const cur = body.currency === 'NT' ? 'NT$' : 'US$';
+  let line;
+  if (body.type === 'Exchange') line = `💱 <b>${cur}${fmt(body.amount,2)}</b> → NT$${fmt(body.received)} (${body.owner})`;
+  else if (body.type === 'Transfer') line = `↔︎ ${body.owner} gives <b>${cur}${fmt(body.amount,2)}</b> to ${body.to}`;
+  else line = `<b>${cur}${fmt(body.amount,2)}</b> · ${body.owner} · ${body.payment}`;
+  $('#confirm-sum').innerHTML = line + `<br>${body.date}${body.notes ? ' · ' + escapeHtml(body.notes) : ''}`;
+  $('#msg').className = ''; $('#msg').textContent = '';
+  $('#submit').style.display = 'none';
+  $('#confirm-box').classList.add('show');
+});
+
+$('#confirm-no').addEventListener('click', () => {
+  pendingBody = null;
+  $('#confirm-box').classList.remove('show');
+  $('#submit').style.display = '';
+});
+
+$('#confirm-yes').addEventListener('click', async () => {
+  const body = pendingBody;
+  if (!body) return;
+  const msg = $('#msg');
+  $('#confirm-box').classList.remove('show');
+  $('#submit').style.display = '';
   $('#submit').disabled = true; msg.className=''; msg.textContent = 'Saving…';
   try {
     const r = await fetch('/api/transactions', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || r.status);
-    msg.className='ok'; msg.textContent = '✓ Saved ' + (body.currency==='NT'?'NT$':'US$') + fmt(amount,2) + ' — ' + body.type;
+    msg.className='ok'; msg.textContent = '✓ Saved ' + (body.currency==='NT'?'NT$':'US$') + fmt(body.amount,2) + ' — ' + body.type;
     $('#amount').value=''; $('#notes').value=''; $('#received').value='';
     if (DATA) {
-      DATA.transactions.push({ Date: body.date, Owner: body.owner, Payment: body.payment, Amount: amount,
+      DATA.transactions.push({ Date: body.date, Owner: body.owner, Payment: body.payment, Amount: body.amount,
         Currency: body.currency, Type: body.type, Tag: body.tag, To: body.to, Received: body.received,
         Notes: body.notes, 'Logged At': new Date().toISOString() });
       renderAll();
@@ -342,13 +387,41 @@ $('#submit').addEventListener('click', async () => {
     load();   // pull the authoritative copy back from the sheet
   } catch (e) { msg.className='err'; msg.textContent = '✗ ' + e.message; }
   $('#submit').disabled = false;
+  pendingBody = null;
 });
+
+// ---- delete -----------------------------------------------------------------------
+async function deleteTx(loggedAt, label) {
+  if (!confirm('Delete this entry?\n\n' + label)) return;
+  try {
+    const r = await fetch('/api/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ loggedAt }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || r.status);
+    DATA.transactions = DATA.transactions.filter(t => t['Logged At'] !== loggedAt);
+    renderAll();
+    load();
+  } catch (e) { alert('Delete failed: ' + e.message); }
+}
 
 // ---- render --------------------------------------------------------------------------
 function renderAll() { renderTx(); renderAnalysis(); }
 
 function renderAnalysis() {
   if (!DATA) return;
+  // Tentative budget: earmarked items vs. trip funds vs. actual spending.
+  const b = DATA.budget, items = b.items || [];
+  const planned = items.reduce((s, i) => s + i.usd, 0);
+  const funds = (b.startUsd?.Andrew || 0) + (b.startUsd?.Keren || 0);
+  const spent = DATA.transactions.filter(t => !isFlow(t)).reduce((s, t) => s + usd(t), 0);
+  const remaining = funds - planned - spent;
+  $('#budget').innerHTML = items.map(i => `
+    <div class="hold"><span class="who" style="font-weight:400">${escapeHtml(i.name)}</span><span class="amts">$${fmt(i.usd)}</span></div>`).join('')
+    + `<div class="hold"><span class="who">Planned total</span><span class="amts"><b>$${fmt(planned)}</b></span></div>
+       <div class="hold"><span class="who">Spent so far</span><span class="amts"><b>$${fmt(spent,0)}</b></span></div>
+       <div class="hold"><span class="who">Trip funds</span><span class="amts"><b>$${fmt(funds)}</b></span></div>
+       <div class="hold"><span class="who" style="font-size:17px">Remaining</span><span class="amts" style="font-size:17px"><b style="color:${remaining >= 0 ? 'var(--accent)' : 'var(--red)'}">$${fmt(remaining,0)}</b></span></div>`;
+
   // Amount owed = credit-card charges (they never touched cash on hand).
   const owed = { Andrew: { NT: 0, USD: 0 }, Keren: { NT: 0, USD: 0 } };
   for (const t of DATA.transactions) {
@@ -438,14 +511,20 @@ function renderTx() {
       title = (label ? label + tag + (notes ? ' · ' + notes : '') : (notes || 'Spend') + tag);
       sub = `${t.Owner} · ${t.Payment}`;
     }
+    const time = t['Logged At'] ? new Date(t['Logged At']).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : '';
     html += `<div class="tx${isFlow(t)?' flow':''}">
-      <div class="l"><div class="t">${title}</div><div class="s">${sub}</div></div>
+      <div class="l"><div class="t">${title}</div><div class="s">${sub}${time ? ' · ' + time : ''}</div></div>
       <div class="r"><div class="a">${t.Currency==='NT'?'NT$':'US$'}${fmt(t.Amount,2)}</div>
         <div class="c">${isFlow(t) ? '' : '≈ $'+fmt(usd(t),1)}</div></div>
+      ${t['Logged At'] ? `<button class="del" data-logged="${t['Logged At']}" data-label="${escapeHtml(String(t.Notes || t.Type))} — ${t.Currency==='NT'?'NT$':'US$'}${fmt(t.Amount,2)}">✕</button>` : ''}
     </div>`;
   }
   $('#txlist').innerHTML = html;
 }
+$('#txlist').addEventListener('click', (e) => {
+  const b = e.target.closest('button.del'); if (!b) return;
+  deleteTx(b.dataset.logged, b.dataset.label);
+});
 function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 </script>
 </body>

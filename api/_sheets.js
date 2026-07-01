@@ -138,6 +138,29 @@ export async function updateCell(tab, header, rowNumber, colName, value) {
   );
 }
 
+// Numeric gid of a tab (needed for row deletion), cached per instance.
+let _gids = null;
+export async function getSheetGid(tab) {
+  if (!_gids) {
+    const meta = await api('?fields=sheets.properties(title,sheetId)');
+    _gids = {};
+    for (const s of meta.sheets || []) _gids[s.properties.title] = s.properties.sheetId;
+  }
+  if (!(tab in _gids)) throw new Error(`No tab "${tab}"`);
+  return _gids[tab];
+}
+
+// Hard-delete one row (1-based row number, as returned in getRows()._row).
+export async function deleteRow(tab, rowNumber) {
+  const gid = await getSheetGid(tab);
+  await api(':batchUpdate', {
+    method: 'POST',
+    body: JSON.stringify({ requests: [{ deleteDimension: {
+      range: { sheetId: gid, dimension: 'ROWS', startIndex: rowNumber - 1, endIndex: rowNumber },
+    } }] }),
+  });
+}
+
 // ---- One-time sheet bootstrap -------------------------------------------
 // The spreadsheet starts as a blank sheet owned by Andrew. On the first API
 // call we create the Transactions + Budget tabs with headers and seed the
@@ -153,13 +176,11 @@ export const BUDGET_DEFAULTS = [
   ['NT per USD', 30],
   ['Start USD: Andrew', 6300],
   ['Start USD: Keren', 6300],
-  ['Budget: Food', 800],
-  ['Budget: Transport', 400],
-  ['Budget: Lodging', 1500],
-  ['Budget: Shopping', 500],
-  ['Budget: Activities', 400],
-  ['Budget: Gifts', 200],
-  ['Budget: Other', 200],
+  ['Budget: TMF', 3156],
+  ['Budget: Hot springs', 652],
+  ['Budget: Take home to KCM', 4000],
+  ['Budget: Offering Church', 1000],
+  ['Budget: Honorarium LP', 1000],
 ];
 
 let _bootstrapped = false;
