@@ -120,6 +120,24 @@ export async function appendRow(tab, obj) {
   return row;
 }
 
+// 1-based column index -> A1 letter(s).
+export function colLetter(n) {
+  let s = '';
+  while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = (n - m - 1) / 26; }
+  return s;
+}
+
+// Set a single cell by header name on a given sheet row number.
+export async function updateCell(tab, header, rowNumber, colName, value) {
+  const idx = header.indexOf(colName);
+  if (idx < 0) throw new Error(`Column "${colName}" not found in ${tab}`);
+  const a1 = `${colLetter(idx + 1)}${rowNumber}`;
+  await api(
+    `/values/${encodeURIComponent(tab)}!${a1}?valueInputOption=RAW`,
+    { method: 'PUT', body: JSON.stringify({ values: [[value]] }) },
+  );
+}
+
 // ---- One-time sheet bootstrap -------------------------------------------
 // The spreadsheet starts as a blank sheet owned by Andrew. On the first API
 // call we create the Transactions + Budget tabs with headers and seed the
@@ -157,6 +175,9 @@ export async function ensureSetup() {
   if (!titles.includes('Budget')) {
     requests.push({ addSheet: { properties: { title: 'Budget', gridProperties: { frozenRowCount: 1 } } } });
   }
+  if (!titles.includes('Subs')) {
+    requests.push({ addSheet: { properties: { title: 'Subs', gridProperties: { frozenRowCount: 1 }, hidden: true } } });
+  }
   if (requests.length) {
     await api(':batchUpdate', { method: 'POST', body: JSON.stringify({ requests }) });
   }
@@ -172,6 +193,12 @@ export async function ensureSetup() {
   if (!budgetHeader.length) {
     await api(`/values/Budget!A1?valueInputOption=RAW`, {
       method: 'PUT', body: JSON.stringify({ values: BUDGET_DEFAULTS }),
+    });
+  }
+  const subsHeader = await getHeader('Subs');
+  if (!subsHeader.length) {
+    await api(`/values/Subs!A1?valueInputOption=RAW`, {
+      method: 'PUT', body: JSON.stringify({ values: [['Endpoint', 'P256dh', 'Auth', 'Owner', 'Added At']] }),
     });
   }
   _bootstrapped = true;

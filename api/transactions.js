@@ -6,7 +6,8 @@
 //                      Not counted as spending.
 //   anything else    = an expense category; `tag` is the optional meal tag
 //                      (Breakfast/Lunch/Dinner/Snack/Drinks) for Food.
-import { ensureSetup, appendRow } from './_sheets.js';
+import { ensureSetup, appendRow, getRows } from './_sheets.js';
+import { sendPush } from './_push.js';
 
 const OWNERS = ['Andrew', 'Keren'];
 const PAYMENTS = ['Cash', 'Credit', 'Transfer'];
@@ -43,6 +44,24 @@ export default async function handler(req, res) {
       'Notes': String(b.notes || '').slice(0, 500),
       'Logged At': new Date().toISOString(),
     });
+
+    // Ping the other person's phone(s). Best-effort: a push failure must never
+    // fail the save itself.
+    if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+      try {
+        const cur = b.currency === 'NT' ? 'NT$' : 'US$';
+        const n = (x) => Number(x).toLocaleString('en-US');
+        let text;
+        if (b.type === 'Exchange') text = `${b.owner} exchanged ${cur}${n(amount)} → NT$${n(received)}`;
+        else if (b.type === 'Transfer') text = `${b.owner} gave ${b.to} ${cur}${n(amount)}`;
+        else text = `${b.owner} spent ${cur}${n(amount)}${b.notes ? ' · ' + b.notes : ''}`;
+        const subs = (await getRows('Subs')).rows.filter((s) => s.Endpoint && s.Owner !== b.owner);
+        await Promise.allSettled(subs.map((s) =>
+          sendPush({ endpoint: s.Endpoint, keys: { p256dh: s.P256dh, auth: s.Auth } },
+                   { title: 'Trip Budget 🇹🇼', body: text })));
+      } catch { /* never block the save */ }
+    }
+
     res.status(200).json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });

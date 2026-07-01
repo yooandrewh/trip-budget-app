@@ -31,7 +31,15 @@ const transactions = [
 http.createServer((req, res) => {
   if (req.url.startsWith('/api/data')) {
     res.setHeader('Content-Type', 'application/json');
-    return res.end(JSON.stringify({ transactions, budget }));
+    return res.end(JSON.stringify({ transactions, budget, vapidPublicKey: '' }));
+  }
+  if (req.url.startsWith('/api/subscribe')) {
+    res.setHeader('Content-Type', 'application/json');
+    return res.end(JSON.stringify({ ok: true }));
+  }
+  if (req.url === '/manifest.json' || req.url === '/sw.js') {
+    res.setHeader('Content-Type', req.url === '/sw.js' ? 'text/javascript' : 'application/json');
+    return res.end(fs.readFileSync(path.join(root, req.url.slice(1))));
   }
   if (req.url.startsWith('/api/transactions') && req.method === 'POST') {
     let body = '';

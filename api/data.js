@@ -26,6 +26,7 @@ export default async function handler(req, res) {
         startUsd,
         categories,
       },
+      vapidPublicKey: process.env.VAPID_PUBLIC_KEY || '',
     });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
