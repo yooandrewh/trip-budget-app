@@ -1,0 +1,7 @@
+{
+  "name": "trip-budget-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Taiwan trip budget tracker — iPhone web app backed by Google Sheets",
+  "type": "module"
+}

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "trip-budget-stub",
+      "runtimeExecutable": "/opt/homebrew/bin/node",
+      "runtimeArgs": ["scripts/dev-server.mjs", "3210"],
+      "port": 3210
+    }
+  ]
+}
