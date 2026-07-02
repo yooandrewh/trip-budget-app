@@ -148,6 +148,18 @@
       <button data-v="Keren">Keren</button>
     </div>
 
+    <div class="cond show" id="tag-wrap">
+      <label class="f">Tag (optional)</label>
+      <div class="chips" id="tag">
+        <button data-v="Breakfast">Breakfast</button>
+        <button data-v="Lunch">Lunch</button>
+        <button data-v="Dinner">Dinner</button>
+        <button data-v="LP">LP</button>
+        <button data-v="__custom">✏️ Other</button>
+      </div>
+      <input id="tag-custom" type="text" placeholder="Write your own tag" style="margin-top:8px;display:none">
+    </div>
+
     <div class="cond" id="to-wrap">
       <label class="f">Give to</label>
       <div class="seg" id="to">
@@ -243,6 +255,8 @@
 <!-- ============ ANALYSIS ============ -->
 <div class="page" id="page-an">
   <div id="verdict"></div>
+  <div class="card"><div class="sec-h">Average spend per meal</div><div id="meals"></div>
+    <div class="note" style="margin-bottom:0">Everything bought in the same meal window on the same day counts as one meal. Untagged purchases are assigned by time: 4–11am breakfast, 11am–4pm lunch, 4–10:30pm dinner.</div></div>
   <div class="card"><div class="sec-h">Credit owed (to pay later)</div><div id="owed"></div></div>
   <div class="card"><div class="sec-h">Cash on hand</div><div id="holdings-an"></div></div>
   <div class="card"><div class="sec-h">Tentative budget (what's still ahead)</div><div id="budget"></div></div>
@@ -289,9 +303,25 @@ wireSeg('owner','owner');
 wireSeg('payment','payment');
 wireSeg('currency','currency');
 wireSeg('to','to');
+// Tag chips: tap to select, tap again to clear; "✏️ Other" opens a write-in.
+state.tag = '';
+$('#tag').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  const was = b.classList.contains('on');
+  document.querySelectorAll('#tag button').forEach(x => x.classList.remove('on'));
+  if (!was) b.classList.add('on');
+  state.tag = was ? '' : b.dataset.v;
+  $('#tag-custom').style.display = state.tag === '__custom' ? '' : 'none';
+});
+function currentTag() {
+  if (state.tag === '__custom') return $('#tag-custom').value.trim().slice(0, 40) || 'Other';
+  return state.tag;
+}
+
 wireSeg('kind','kind', () => {
   const k = state.kind;
   $('#payment-wrap').classList.toggle('show', k === 'Spend');
+  $('#tag-wrap').classList.toggle('show', k === 'Spend');
   $('#to-wrap').classList.toggle('show', k === 'Transfer');
   $('#received-wrap').classList.toggle('show', k === 'Exchange');
   $('#amount-label').textContent = k === 'Exchange' ? 'Amount swapped' : 'Amount';
@@ -385,7 +415,7 @@ function buildBody() {
   return { date: $('#date').value || todayISO(), time: $('#time').value || nowHM(), owner: state.owner,
     payment: state.kind === 'Spend' ? state.payment : 'Cash',
     amount, currency: state.currency, type,
-    tag: '',
+    tag: type === 'Spend' ? currentTag() : '',
     to: type === 'Transfer' ? state.to : '',
     received: type === 'Exchange' ? received : '',
     notes: $('#notes').value.trim() };
@@ -400,7 +430,7 @@ $('#submit').addEventListener('click', () => {
   if (body.type === 'Exchange') line = `💱 <b>${cur}${fmt(body.amount,2)}</b> → NT$${fmt(body.received)} (${body.owner})`;
   else if (body.type === 'Transfer') line = `↔︎ ${body.owner} gives <b>${cur}${fmt(body.amount,2)}</b> to ${body.to}`;
   else line = `<b>${cur}${fmt(body.amount,2)}</b> · ${body.owner} · ${body.payment}`;
-  $('#confirm-sum').innerHTML = line + `<br>${body.date} ${body.time}${body.notes ? ' · ' + escapeHtml(body.notes) : ''}`;
+  $('#confirm-sum').innerHTML = line + `<br>${body.date} ${body.time}${body.tag ? ' · ' + escapeHtml(body.tag) : ''}${body.notes ? ' · ' + escapeHtml(body.notes) : ''}`;
   $('#msg').className = ''; $('#msg').textContent = '';
   $('#submit').style.display = 'none';
   $('#confirm-box').classList.add('show');
@@ -426,6 +456,8 @@ $('#confirm-yes').addEventListener('click', async () => {
     msg.className='ok'; msg.textContent = '✓ Saved ' + (body.currency==='NT'?'NT$':'US$') + fmt(body.amount,2) + ' — ' + body.type;
     $('#amount').value=''; $('#notes').value=''; $('#received').value='';
     $('#time').value = nowHM();
+    state.tag = ''; $('#tag-custom').value = ''; $('#tag-custom').style.display = 'none';
+    document.querySelectorAll('#tag button').forEach(x => x.classList.remove('on'));
     if (DATA) {
       DATA.transactions.push({ Date: body.date, Owner: body.owner, Payment: body.payment, Amount: body.amount,
         Currency: body.currency, Type: body.type, Tag: body.tag, To: body.to, Received: body.received,
@@ -524,8 +556,46 @@ function foodBetween(from, to) {
   return { nt, days };
 }
 
+// Group spends into meal events: same day + same meal = one meal, no matter
+// how many separate purchases it took. Tagged entries use their tag; untagged
+// ones are assigned a meal from their time of day. Non-meal tags (LP, Snack,
+// custom…) get their own per-event averages.
+function mealStats() {
+  const MEAL_TAGS = ['Breakfast', 'Lunch', 'Dinner'];
+  const events = {};   // "date|tag" -> NT total for that event
+  for (const t of DATA.transactions) {
+    if (isFlow(t)) continue;
+    let tag = t.Tag;
+    if (!tag) {
+      const hm = timeOf(t);
+      tag = hm >= '04:00' && hm < '11:00' ? 'Breakfast'
+          : hm >= '11:00' && hm < '16:00' ? 'Lunch'
+          : hm >= '16:00' && hm <= '22:30' ? 'Dinner' : '';
+      if (!tag) continue;               // late-night untagged: not a meal
+    }
+    const nt = t.Currency === 'NT' ? Number(t.Amount) : Number(t.Amount) * rate();
+    const key = t.Date + '|' + tag;
+    events[key] = (events[key] || 0) + nt;
+  }
+  const byTag = {};
+  for (const [key, nt] of Object.entries(events)) {
+    const tag = key.split('|')[1];
+    (byTag[tag] = byTag[tag] || { count: 0, total: 0 });
+    byTag[tag].count++; byTag[tag].total += nt;
+  }
+  const order = [...MEAL_TAGS.filter(m => byTag[m]), ...Object.keys(byTag).filter(k => !MEAL_TAGS.includes(k)).sort()];
+  return order.map(tag => ({ tag, ...byTag[tag], isMeal: MEAL_TAGS.includes(tag) }));
+}
+
 function renderAnalysis() {
   if (!DATA) return;
+
+  const meals = mealStats();
+  $('#meals').innerHTML = meals.length
+    ? meals.map(m => `
+      <div class="hold"><span class="who">${escapeHtml(m.tag)}</span>
+        <span class="amts">NT$${fmt(m.total / m.count)} avg <span class="u">· ${m.count} ${m.isMeal ? (m.count === 1 ? 'meal' : 'meals') : (m.count === 1 ? 'time' : 'times')} · ≈ $${fmt(m.total / m.count / rate(), 1)}</span></span></div>`).join('')
+    : '<div class="empty" style="padding:16px 0">No meals logged yet</div>';
   // Day-aware view: today decides how much of the food budget is still ahead.
   // Projected leftover = funds − spent so far − (fixed items + food for the
   // days that are left). The budget card below shows the cumulative whole-trip

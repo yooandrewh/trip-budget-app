@@ -68,7 +68,7 @@ http.createServer((req, res) => {
     req.on('data', (c) => body += c);
     req.on('end', () => {
       const b = JSON.parse(body || '{}');
-      transactions.push({ Date: b.date, Owner: b.owner, Payment: b.payment, Amount: b.amount, Currency: b.currency, Type: b.type, To: b.to || '', Received: b.received || '', Notes: b.notes || '', 'Logged At': new Date().toISOString(), Time: b.time || '' });
+      transactions.push({ Date: b.date, Owner: b.owner, Payment: b.payment, Amount: b.amount, Currency: b.currency, Type: b.type, Tag: b.tag || '', To: b.to || '', Received: b.received || '', Notes: b.notes || '', 'Logged At': new Date().toISOString(), Time: b.time || '' });
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ ok: true }));
     });
