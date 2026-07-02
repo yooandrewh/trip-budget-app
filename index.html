@@ -151,19 +151,6 @@
       <button data-v="Keren">Keren</button>
     </div>
 
-    <div class="cond show" id="tag-wrap">
-      <label class="f">Tag (optional)</label>
-      <div class="chips" id="tag">
-        <button data-v="Breakfast">Breakfast</button>
-        <button data-v="Lunch">Lunch</button>
-        <button data-v="Dinner">Dinner</button>
-        <button data-v="Snack">Snack</button>
-        <button data-v="LP">LP</button>
-        <button data-v="__custom">✏️ Other</button>
-      </div>
-      <input id="tag-custom" type="text" placeholder="Write your own tag" style="margin-top:8px;display:none">
-    </div>
-
     <div class="cond" id="to-wrap">
       <label class="f">Give to</label>
       <div class="seg" id="to">
@@ -198,6 +185,12 @@
     <div class="amt-row">
       <input id="date" type="date" style="flex:1.4">
       <input id="time" type="time" style="flex:1">
+    </div>
+
+    <div class="cond show" id="tag-wrap">
+      <label class="f">Tag (optional)</label>
+      <div class="chips" id="tag"></div>
+      <input id="tag-custom" type="text" placeholder="Write your own tag" style="margin-top:8px;display:none">
     </div>
 
     <label class="f">Notes</label>
@@ -260,7 +253,7 @@
 <div class="page" id="page-an">
   <div id="verdict"></div>
   <div class="card"><div class="sec-h">Average spend per meal</div><div id="meals"></div>
-    <div class="note" style="margin-bottom:0">Everything bought in the same meal window on the same day counts as one meal. Untagged purchases are assigned by time: 4–11am breakfast, 11am–4pm lunch, 4–10:30pm dinner.</div></div>
+    <div class="note" style="margin-bottom:0">Everything bought in the same meal window on the same day counts as one meal. Untagged purchases are assigned by time: 4–11am breakfast, 11am–4pm lunch, 4–10:30pm dinner. “/person” divides by the team size (${'People'} in the Budget tab).</div></div>
   <div class="card"><div class="sec-h">Credit owed (to pay later)</div><div id="owed"></div></div>
   <div class="card"><div class="sec-h">Cash on hand</div><div id="holdings-an"></div></div>
   <div class="card"><div class="sec-h">Tentative budget (what's still ahead)</div><div id="budget"></div></div>
@@ -308,7 +301,20 @@ wireSeg('payment','payment');
 wireSeg('currency','currency');
 wireSeg('to','to');
 // Tag chips: tap to select, tap again to clear; "✏️ Other" opens a write-in.
+// Any custom tag used before shows up as its own chip from then on.
 state.tag = '';
+const DEFAULT_TAGS = ['Breakfast', 'Lunch', 'Dinner', 'Snack', 'LP'];
+function renderTagChips() {
+  const seen = new Set(DEFAULT_TAGS), extras = [];
+  for (const t of DATA?.transactions || []) {
+    const tag = String(t.Tag || '').trim();
+    if (tag && !seen.has(tag)) { seen.add(tag); extras.push(tag); }
+  }
+  $('#tag').innerHTML = [...DEFAULT_TAGS, ...extras.sort()]
+    .map(v => `<button data-v="${escapeHtml(v)}" class="${state.tag === v ? 'on' : ''}">${escapeHtml(v)}</button>`).join('')
+    + `<button data-v="__custom" class="${state.tag === '__custom' ? 'on' : ''}">✏️ Other</button>`;
+}
+renderTagChips();
 $('#tag').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
   const was = b.classList.contains('on');
@@ -532,32 +538,49 @@ async function deleteTx(loggedAt, label) {
 }
 
 // ---- render --------------------------------------------------------------------------
-function renderAll() { renderTx(); renderAnalysis(); }
+function renderAll() { renderTagChips(); renderTx(); renderAnalysis(); }
 
 // Cumulative food cost for the WHOLE trip: 200NT per person per day for the
 // whole team, day by day. TMF covers all meals from Mon night to Fri night:
 // the start day only needs breakfast+lunch (2/3 of a day), days after that
 // through TMF End are fully covered. VBS covers weekday lunches (1/3 of a day)
 // outside TMF.
-function foodBetween(from, to) {
+// Which meals do we pay for on a given day? TMF covers everything from Mon
+// night (start day pays breakfast+lunch, the rest of the week pays nothing);
+// VBS covers weekday lunches.
+function payableMeals(iso, dow) {
   const b = DATA.budget;
-  if (!from || !to || from > to) return { nt: 0, days: 0 };
-  const perDay = (b.foodNtPerDay || 200) * (b.people || 14);
-  let nt = 0, days = 0;
+  if (b.tmfStart && b.tmfEnd && iso >= b.tmfStart && iso <= b.tmfEnd) {
+    return iso === b.tmfStart ? ['B', 'L'] : [];
+  }
+  if (b.vbsStart && b.vbsEnd && iso >= b.vbsStart && iso <= b.vbsEnd && dow >= 1 && dow <= 5) {
+    return ['B', 'D'];
+  }
+  return ['B', 'L', 'D'];
+}
+
+// Food cost between two dates (inclusive), counted meal by meal. When
+// opts.startTime is given, meals whose window has already passed on the first
+// day are dropped — so "still ahead" shrinks as today's meals go by
+// (breakfast passes at 11:00, lunch at 16:00, dinner at 22:30).
+function foodBetween(from, to, opts = {}) {
+  const b = DATA.budget;
+  if (!from || !to || from > to) return { nt: 0, days: 0, meals: 0 };
+  const perMeal = (b.foodNtPerDay || 200) * (b.people || 14) / 3;
+  let nt = 0, days = 0, meals = 0;
   for (let d = new Date(from + 'T12:00'); ; d.setDate(d.getDate() + 1)) {
     const iso = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
     if (iso > to) break;
     days++;
-    let frac = 1;
-    if (b.tmfStart && b.tmfEnd && iso >= b.tmfStart && iso <= b.tmfEnd) {
-      frac = iso === b.tmfStart ? 2/3 : 0;
-    } else if (b.vbsStart && b.vbsEnd && iso >= b.vbsStart && iso <= b.vbsEnd) {
-      const dow = d.getDay();
-      if (dow >= 1 && dow <= 5) frac = 2/3;
+    let m = payableMeals(iso, d.getDay());
+    if (iso === from && opts.startTime) {
+      const t = opts.startTime;
+      m = m.filter(x => (x === 'B' && t < '11:00') || (x === 'L' && t < '16:00') || (x === 'D' && t < '22:30'));
     }
-    nt += perDay * frac;
+    meals += m.length;
+    nt += m.length * perMeal;
   }
-  return { nt, days };
+  return { nt, days, meals };
 }
 
 // Group spends into meal events: same day + same meal = one meal, no matter
@@ -595,10 +618,11 @@ function renderAnalysis() {
   if (!DATA) return;
 
   const meals = mealStats();
+  const ppl = DATA.budget.people || 14;
   $('#meals').innerHTML = meals.length
     ? meals.map(m => `
       <div class="hold"><span class="who">${escapeHtml(m.tag)}</span>
-        <span class="amts">NT$${fmt(m.total / m.count)} avg <span class="u">· ${m.count} ${m.isMeal ? (m.count === 1 ? 'meal' : 'meals') : (m.count === 1 ? 'time' : 'times')} · ≈ $${fmt(m.total / m.count / rate(), 1)}</span></span></div>`).join('')
+        <span class="amts">NT$${fmt(m.total / m.count)} avg${m.isMeal ? ` · NT$${fmt(m.total / m.count / ppl)}/person` : ''} <span class="u">· ${m.count} ${m.isMeal ? (m.count === 1 ? 'meal' : 'meals') : (m.count === 1 ? 'time' : 'times')}</span></span></div>`).join('')
     : '<div class="empty" style="padding:16px 0">No meals logged yet</div>';
   // Day-aware view: today decides how much of the food budget is still ahead.
   // Projected leftover = funds − spent so far − (fixed items + food for the
@@ -609,7 +633,8 @@ function renderAnalysis() {
   const spent = DATA.transactions.filter(t => !isFlow(t)).reduce((s, t) => s + usd(t), 0);
   const food = foodBetween(b.tripStart, b.tripEnd);                       // whole trip (cumulative)
   const fromToday = todayISO() > b.tripStart ? todayISO() : b.tripStart;
-  const foodAhead = todayISO() > b.tripEnd ? { nt: 0, days: 0 } : foodBetween(fromToday, b.tripEnd);
+  const foodAhead = todayISO() > b.tripEnd ? { nt: 0, days: 0, meals: 0 }
+    : foodBetween(fromToday, b.tripEnd, { startTime: fromToday === todayISO() ? nowHM() : undefined });
   const foodUsd = food.nt / rate();
   const itemsUsd = items.reduce((s, i) => s + i.usd, 0);
   const planned = itemsUsd + foodUsd;                                      // cumulative budget
@@ -621,7 +646,7 @@ function renderAnalysis() {
   $('#verdict').innerHTML = `<div class="verdict ${ok ? 'good' : 'bad'}">
     <div class="funds-top"><span>Trip funds</span><span>$${fmt(funds)}</span></div>
     <div class="funds-row"><span>− Spent so far</span><span>$${fmt(spent,0)}</span></div>
-    <div class="funds-row"><span>− Still ahead (items + food × ${foodAhead.days} days left)</span><span>$${fmt(stillAhead,0)}</span></div>
+    <div class="funds-row"><span>− Still ahead (items + ${fmt(foodAhead.meals)} meals to go)</span><span>$${fmt(stillAhead,0)}</span></div>
     <div class="funds-row total"><span>${ok ? '✅ Projected leftover' : '🚨 Projected short'}</span><span>$${fmt(Math.abs(leftover),0)}</span></div>
     <div class="funds-row" style="margin-top:6px"><span>Day ${dayOfTrip} of ${food.days}</span><span>${foodAhead.days} days left</span></div>
   </div>`;
