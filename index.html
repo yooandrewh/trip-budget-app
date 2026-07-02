@@ -219,7 +219,7 @@
     </div>
     <div id="holdings"></div>
     <div class="cond" id="rec-form">
-      <div class="note" style="margin:10px 2px 0">Count the cash actually in someone's wallet — the app resets their balance to this and keeps going from there.</div>
+      <div class="note" style="margin:10px 2px 0">Count the cash actually in someone's wallet — the app logs the count and the gap vs. what it expects. Balances aren't changed, so the gap stays visible until you find the missing transaction and log it.</div>
       <label class="f">Whose wallet</label>
       <div class="seg" id="rec-owner">
         <button data-v="Andrew" class="on">Andrew</button>
@@ -462,7 +462,7 @@ $('#rec-save').addEventListener('click', async () => {
   const diffTxt = Math.abs(diff) < 0.005
     ? 'Matches the app exactly ✓'
     : `App expected ${cur}${fmt(expected,2)} — ${diff > 0 ? 'over' : 'short'} by ${cur}${fmt(Math.abs(diff),2)}`;
-  if (!confirm(`Set ${rec.owner}'s ${cur} on hand to ${cur}${fmt(amount,2)}?\n\n${diffTxt}`)) return;
+  if (!confirm(`Log ${rec.owner}'s cash count: ${cur}${fmt(amount,2)}?\n\n${diffTxt}`)) return;
   $('#rec-save').disabled = true; m.textContent = 'Saving…';
   try {
     const notes = Math.abs(diff) < 0.005
@@ -473,7 +473,7 @@ $('#rec-save').addEventListener('click', async () => {
     const r = await fetch(API + '/api/transactions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || r.status);
-    m.textContent = '✓ Balance set';
+    m.textContent = '✓ Count logged';
     $('#rec-amount').value = '';
     $('#rec-form').classList.remove('show');
     load();
@@ -612,7 +612,9 @@ function holdings() {
     const o = h[t.Owner]; if (!o) continue;
     const amt = Number(t.Amount) || 0;
     if (t.Type === 'Reconcile') {
-      o[t.Currency] = amt;
+      // A count is a checkpoint, not a correction: it records the discrepancy
+      // but leaves the computed balance alone so the gap stays visible until
+      // the missing transaction is found and logged.
     } else if (t.Type === 'Exchange') {
       o[t.Currency] -= amt;
       o.NT += Number(t.Received) || amt * rate();
@@ -653,7 +655,7 @@ function renderTx() {
     }
     let title, sub;
     if (t.Type === 'Reconcile') {
-      title = `⚖️ ${t.Owner}'s ${t.Currency === 'NT' ? 'NT$' : 'US$'} set to ${fmt(t.Amount,2)}`;
+      title = `⚖️ ${t.Owner} counted ${t.Currency === 'NT' ? 'NT$' : 'US$'}${fmt(t.Amount,2)}`;
       sub = escapeHtml(t.Notes || 'cash count');
     } else if (t.Type === 'Exchange') {
       title = `💱 Exchange → NT$${fmt(t.Received)}`;
