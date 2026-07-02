@@ -456,11 +456,20 @@ $('#rec-save').addEventListener('click', async () => {
   const m = $('#rec-msg');
   if (!isFinite(amount) || amount < 0) { m.textContent = 'Enter the counted amount'; return; }
   const cur = rec.cur === 'NT' ? 'NT$' : 'US$';
-  if (!confirm(`Set ${rec.owner}'s ${cur} on hand to ${cur}${fmt(amount,2)}?`)) return;
+  // Compare the count against what the app thinks they should be holding.
+  const expected = holdings()[rec.owner][rec.cur];
+  const diff = amount - expected;
+  const diffTxt = Math.abs(diff) < 0.005
+    ? 'Matches the app exactly ✓'
+    : `App expected ${cur}${fmt(expected,2)} — ${diff > 0 ? 'over' : 'short'} by ${cur}${fmt(Math.abs(diff),2)}`;
+  if (!confirm(`Set ${rec.owner}'s ${cur} on hand to ${cur}${fmt(amount,2)}?\n\n${diffTxt}`)) return;
   $('#rec-save').disabled = true; m.textContent = 'Saving…';
   try {
+    const notes = Math.abs(diff) < 0.005
+      ? 'Cash count — matched'
+      : `Cash count — ${diff > 0 ? 'over' : 'short'} ${cur}${fmt(Math.abs(diff),2)} (expected ${cur}${fmt(expected,2)})`;
     const body = { date: todayISO(), time: nowHM(), owner: rec.owner, payment: 'Cash',
-      amount, currency: rec.cur, type: 'Reconcile', notes: 'Cash count' };
+      amount, currency: rec.cur, type: 'Reconcile', notes };
     const r = await fetch(API + '/api/transactions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || r.status);
@@ -645,7 +654,7 @@ function renderTx() {
     let title, sub;
     if (t.Type === 'Reconcile') {
       title = `⚖️ ${t.Owner}'s ${t.Currency === 'NT' ? 'NT$' : 'US$'} set to ${fmt(t.Amount,2)}`;
-      sub = `cash count`;
+      sub = escapeHtml(t.Notes || 'cash count');
     } else if (t.Type === 'Exchange') {
       title = `💱 Exchange → NT$${fmt(t.Received)}`;
       sub = `${t.Owner} · swapped ${t.Currency==='NT'?'NT$':'US$'}${fmt(t.Amount)}`;
