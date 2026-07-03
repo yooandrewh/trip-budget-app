@@ -75,6 +75,13 @@ http.createServer((req, res) => {
         if (i >= 0) transactions.splice(i, 1);
         return res.end(JSON.stringify(i >= 0 ? { ok: true } : { error: 'Not found' }));
       }
+      if (req.url.startsWith('/api/update') && req.method === 'POST') {
+        const { loggedAt, fields } = JSON.parse(body || '{}');
+        const t = transactions.find((x) => x['Logged At'] === loggedAt);
+        if (!t) { res.statusCode = 404; return res.end(JSON.stringify({ error: 'Not found' })); }
+        Object.assign(t, fields);
+        return res.end(JSON.stringify({ ok: true }));
+      }
       if (req.url.startsWith('/api/transactions') && req.method === 'POST') {
         const b = JSON.parse(body || '{}');
         transactions.push({ Date: b.date, Owner: b.owner, Payment: b.payment, Amount: b.amount, Currency: b.currency, Type: b.type, Tag: b.tag || '', To: b.to || '', Received: b.received || '', Notes: b.notes || '', 'Logged At': new Date().toISOString(), Time: b.time || '' });

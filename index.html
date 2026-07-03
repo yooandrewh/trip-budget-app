@@ -139,6 +139,10 @@
 <!-- ============ ADD ============ -->
 <div class="page active" id="page-add">
   <div class="card">
+    <div class="cond" id="edit-banner" style="background:rgba(199,122,23,.1);border:1px solid rgba(199,122,23,.4);border-radius:12px;padding:10px 12px;margin-bottom:14px;display:none;align-items:center;justify-content:space-between;font-size:14px;font-weight:700;color:var(--amber)">
+      ✏️ Editing entry
+      <button id="edit-cancel" style="border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:10px;padding:6px 12px;font-size:13px;font-weight:700">Cancel</button>
+    </div>
     <div class="seg" id="kind">
       <button data-v="Spend" class="on">Spend</button>
       <button data-v="Exchange">💱 Exchange</button>
@@ -328,7 +332,7 @@ function currentTag() {
   return state.tag;
 }
 
-wireSeg('kind','kind', () => {
+function applyKindUI() {
   const k = state.kind;
   $('#payment-wrap').classList.toggle('show', k === 'Spend');
   $('#tag-wrap').classList.toggle('show', k === 'Spend');
@@ -336,7 +340,12 @@ wireSeg('kind','kind', () => {
   $('#received-wrap').classList.toggle('show', k === 'Exchange');
   $('#amount-label').textContent = k === 'Exchange' ? 'Amount swapped' : 'Amount';
   if (k === 'Exchange') setCurrency('USD'); else if (k === 'Transfer') setCurrency('NT');
-});
+}
+wireSeg('kind','kind', applyKindUI);
+function setSeg(id, key, v) {
+  state[key] = v;
+  document.querySelectorAll('#'+id+' button').forEach(x => x.classList.toggle('on', x.dataset.v === v));
+}
 function setCurrency(v) {
   state.currency = v;
   document.querySelectorAll('#currency button').forEach(x => x.classList.toggle('on', x.dataset.v === v));
@@ -410,6 +419,48 @@ $('#notif-btn').addEventListener('click', async () => {
   $('#notif-btn').disabled = false;
 });
 
+// ---- edit mode --------------------------------------------------------------------
+// Tap a transaction row to load it into the form; saving overwrites the row.
+let editing = null;   // { loggedAt, type } while editing
+
+function startEdit(t) {
+  if (t.Type === 'Reconcile') return;   // counts are edited in the sheet if ever needed
+  editing = { loggedAt: t['Logged At'], type: t.Type };
+  const kind = t.Type === 'Exchange' ? 'Exchange' : t.Type === 'Transfer' ? 'Transfer' : 'Spend';
+  setSeg('kind', 'kind', kind); applyKindUI();
+  setSeg('owner', 'owner', t.Owner === 'Keren' ? 'Keren' : 'Andrew');
+  setSeg('payment', 'payment', t.Payment === 'Credit' ? 'Credit' : 'Cash');
+  setCurrency(t.Currency === 'USD' ? 'USD' : 'NT');
+  if (kind === 'Transfer') setSeg('to', 'to', t.To === 'Andrew' ? 'Andrew' : 'Keren');
+  $('#amount').value = t.Amount;
+  $('#received').value = t.Received || '';
+  $('#date').value = t.Date;
+  $('#time').value = timeOf(t);
+  $('#notes').value = t.Notes || '';
+  const tag = String(t.Tag || '').trim();
+  state.tag = tag ? ([...DEFAULT_TAGS, ...[]].includes(tag) || [...document.querySelectorAll('#tag button')].some(b => b.dataset.v === tag) ? tag : '__custom') : '';
+  $('#tag-custom').value = state.tag === '__custom' ? tag : '';
+  renderTagChips();
+  $('#tag-custom').style.display = state.tag === '__custom' ? '' : 'none';
+  $('#edit-banner').style.display = 'flex';
+  $('#submit').textContent = 'Save changes';
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('active', x.dataset.page === 'add'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  $('#page-add').classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+function exitEdit() {
+  editing = null;
+  $('#edit-banner').style.display = 'none';
+  $('#submit').textContent = 'Add transaction';
+  $('#amount').value = ''; $('#notes').value = ''; $('#received').value = '';
+  $('#date').value = todayISO(); $('#time').value = nowHM();
+  state.tag = ''; $('#tag-custom').value = ''; $('#tag-custom').style.display = 'none';
+  renderTagChips();
+}
+$('#edit-cancel').addEventListener('click', exitEdit);
+
 // ---- submit (two-step: review, then confirm) -----------------------------------------
 let pendingBody = null;
 
@@ -459,6 +510,28 @@ $('#confirm-yes').addEventListener('click', async () => {
   $('#confirm-box').classList.remove('show');
   $('#submit').style.display = '';
   $('#submit').disabled = true; msg.className=''; msg.textContent = 'Saving…';
+
+  if (editing) {
+    try {
+      const fields = {
+        Date: body.date, Time: body.time, Owner: body.owner, Payment: body.payment,
+        Amount: body.amount, Currency: body.currency,
+        Type: (state.kind === 'Spend' && !['Exchange', 'Transfer', 'Reconcile'].includes(editing.type)) ? editing.type : state.kind,
+        Tag: body.tag, To: body.to, Received: body.received, Notes: body.notes,
+      };
+      const r = await fetch(API + '/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loggedAt: editing.loggedAt, fields }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || r.status);
+      msg.className = 'ok'; msg.textContent = '✓ Updated';
+      exitEdit();
+      load();
+    } catch (e) { msg.className = 'err'; msg.textContent = '✗ ' + e.message; }
+    $('#submit').disabled = false;
+    pendingBody = null;
+    return;
+  }
+
   try {
     const r = await fetch(API + '/api/transactions', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
     const d = await r.json();
@@ -771,7 +844,7 @@ function renderTx() {
     }
     const hm = timeOf(t);
     const time = hm ? new Date('2000-01-01T' + hm).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : '';
-    html += `<div class="tx${isFlow(t)?' flow':''}">
+    html += `<div class="tx${isFlow(t)?' flow':''}" data-logged="${t['Logged At'] || ''}">
       <div class="l"><div class="t">${title}</div><div class="s">${sub}${time ? ' · ' + time : ''}</div></div>
       <div class="r"><div class="a">${t.Currency==='NT'?'NT$':'US$'}${fmt(t.Amount,2)}</div>
         <div class="c">${isFlow(t) ? '' : '≈ $'+fmt(usd(t),1)}</div></div>
@@ -781,8 +854,12 @@ function renderTx() {
   $('#txlist').innerHTML = html;
 }
 $('#txlist').addEventListener('click', (e) => {
-  const b = e.target.closest('button.del'); if (!b) return;
-  deleteTx(b.dataset.logged, b.dataset.label);
+  const b = e.target.closest('button.del');
+  if (b) { deleteTx(b.dataset.logged, b.dataset.label); return; }
+  const row = e.target.closest('.tx');
+  if (!row || !row.dataset.logged) return;
+  const t = DATA?.transactions.find((x) => x['Logged At'] === row.dataset.logged);
+  if (t) startEdit(t);
 });
 function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 </script>
