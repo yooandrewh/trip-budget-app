@@ -708,6 +708,14 @@ function renderAnalysis() {
   const fromToday = todayISO() > b.tripStart ? todayISO() : b.tripStart;
   const foodAhead = todayISO() > b.tripEnd ? { nt: 0, days: 0, meals: 0 }
     : foodBetween(fromToday, b.tripEnd, { startTime: fromToday === todayISO() ? nowHM() : undefined });
+  // Meals already bought in bulk (e.g. the Costco breakfast run): their real
+  // cost sits in "spent", so they come OUT of the food model entirely.
+  const prepaid = b.prepaidMeals || 0;
+  const perMealNt = (b.foodNtPerDay || 200) * (b.people || 14) / 3;
+  for (const f of [food, foodAhead]) {
+    const cut = Math.min(prepaid, f.meals);
+    f.meals -= cut; f.nt -= cut * perMealNt;
+  }
   const foodUsd = food.nt / rate();
   const itemsUsd = items.reduce((s, i) => s + i.usd, 0);
   const planned = itemsUsd + foodUsd;                                      // cumulative budget
@@ -733,7 +741,7 @@ function renderAnalysis() {
   }
   const row = (name, usdVal, cls='') => `<div class="hold ${cls}"><span class="who" style="font-weight:400">${name}</span><span class="amts">$${fmt(usdVal,0)}</span></div>`;
   let bhtml = `<div class="bgroup-h">Food (whole trip, cumulative)</div>`
-    + row(`${food.days} days × ${b.foodNtPerDay}NT × ${b.people} people · TMF &amp; VBS covered meals excluded · NT$${fmt(food.nt)}`, foodUsd);
+    + row(`${food.days} days × ${b.foodNtPerDay}NT × ${b.people} people · TMF &amp; VBS covered${prepaid ? ` &amp; ${prepaid} prepaid` : ''} meals excluded · NT$${fmt(food.nt)}`, foodUsd);
   for (const g of groups) {
     bhtml += `<div class="bgroup-h">${escapeHtml(g.cat)}</div>`
       + g.items.map(i => row(escapeHtml(i.name), i.usd)).join('')

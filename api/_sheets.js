@@ -176,6 +176,7 @@ export const BUDGET_DEFAULTS = [
   ['NT per USD', 30],
   ['Food NT per person per day', 300],
   ['People', 14],
+  ['Prepaid meals', 0],
   ['TMF Start', '2026-07-20'],
   ['TMF End', '2026-07-24'],
   ['VBS Start', '2026-07-13'],

@@ -38,6 +38,7 @@ export default async function handler(req, res) {
         ntPerUsd: Number(settings['NT per USD']) || 30,
         foodNtPerDay: Number(settings['Food NT per person per day']) || 200,
         people: Number(settings['People']) || 14,
+        prepaidMeals: Number(settings['Prepaid meals']) || 0,
         tmfStart: settings['TMF Start'] || '',
         tmfEnd: settings['TMF End'] || '',
         vbsStart: settings['VBS Start'] || '',
