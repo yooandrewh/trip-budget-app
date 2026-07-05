@@ -80,6 +80,13 @@
   .funds-top { display: flex; justify-content: space-between; font-size: 20px; font-weight: 800; color: var(--text); padding-bottom: 8px; border-bottom: 1px solid var(--line); margin-bottom: 6px; }
   .funds-row { display: flex; justify-content: space-between; font-weight: 400; font-size: 14px; color: var(--text); padding: 3px 0; }
   .funds-row.total { font-weight: 800; font-size: 17px; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 8px; color: inherit; }
+  .cat-row { margin: 12px 0; }
+  .cat-row:first-child { margin-top: 4px; }
+  .cat-row .hd { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 5px; }
+  .cat-row .hd .n { font-weight: 700; }
+  .cat-row .hd .v { color: var(--dim); }
+  .cat-bar { height: 12px; background: var(--card2); border-radius: 7px; overflow: hidden; }
+  .cat-bar .fill { height: 100%; border-radius: 7px; }
   .bgroup-h { color: var(--dim); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin: 12px 2px 2px; }
   .bgroup-h:first-child { margin-top: 0; }
   .hold.subtotal { color: var(--dim); font-size: 13px; }
@@ -256,6 +263,7 @@
 <!-- ============ ANALYSIS ============ -->
 <div class="page" id="page-an">
   <div id="verdict"></div>
+  <div class="card"><div class="sec-h">Where the money's gone</div><div id="cats"></div></div>
   <div class="card"><div class="sec-h">Average spend per meal</div><div id="meals"></div>
     <div class="note" style="margin-bottom:0">Everything bought in the same meal window on the same day counts as one meal. Untagged purchases are assigned by time: 4–11am breakfast, 11am–4pm lunch, 4–10:30pm dinner. “/person” divides by the team size (${'People'} in the Budget tab).</div></div>
   <div class="card"><div class="sec-h">Credit owed (to pay later)</div><div id="owed"></div></div>
@@ -689,6 +697,30 @@ function mealStats() {
 
 function renderAnalysis() {
   if (!DATA) return;
+
+  // Where the money's gone: meal tags (and untagged) roll up into "Meals",
+  // every other tag is its own category.
+  const MEAL_SET = ['Breakfast', 'Lunch', 'Dinner', 'Snack', 'Drinks'];
+  const catOf = (t) => {
+    const tag = String(t.Tag || '').trim();
+    return !tag || MEAL_SET.includes(tag) ? 'Meals' : tag;
+  };
+  const catTotals = {};
+  for (const t of DATA.transactions) {
+    if (isFlow(t)) continue;
+    catTotals[catOf(t)] = (catTotals[catOf(t)] || 0) + usd(t);
+  }
+  const cats = Object.entries(catTotals).sort((a, z) => z[1] - a[1]);
+  const maxCat = cats.length ? cats[0][1] : 1;
+  const totalCat = cats.reduce((s, [, v]) => s + v, 0);
+  const PALETTE = ['#0ea47a', '#2f6fed', '#c77a17', '#8a5cf6', '#d64545', '#0e9aa4', '#6b7280'];
+  $('#cats').innerHTML = cats.map(([name, v], i) => `
+    <div class="cat-row">
+      <div class="hd"><span class="n">${escapeHtml(name)}</span>
+        <span class="v">$${fmt(v, 0)} · ${Math.round(v / totalCat * 100)}%</span></div>
+      <div class="cat-bar"><div class="fill" style="width:${Math.max(v / maxCat * 100, 2)}%;background:${PALETTE[i % PALETTE.length]}"></div></div>
+    </div>`).join('')
+    + `<div class="note" style="margin:10px 2px 0">Total spent $${fmt(totalCat, 0)} · exchanges and cash handoffs excluded</div>`;
 
   const meals = mealStats();
   const ppl = DATA.budget.people || 14;
