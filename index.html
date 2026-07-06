@@ -150,10 +150,11 @@
       ✏️ Editing entry
       <button id="edit-cancel" style="border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:10px;padding:6px 12px;font-size:13px;font-weight:700">Cancel</button>
     </div>
-    <div class="seg" id="kind">
-      <button data-v="Spend" class="on">Spend</button>
-      <button data-v="Exchange">💱 Exchange</button>
-      <button data-v="Transfer">↔︎ Give cash</button>
+    <div class="seg" id="kind" style="flex-wrap:wrap">
+      <button data-v="Spend" class="on" style="flex:1 1 45%">Spend</button>
+      <button data-v="Refund" style="flex:1 1 45%">↩︎ Refund</button>
+      <button data-v="Exchange" style="flex:1 1 45%">💱 Exchange</button>
+      <button data-v="Transfer" style="flex:1 1 45%">↔︎ Give cash</button>
     </div>
 
     <label class="f">Owner</label>
@@ -168,6 +169,11 @@
         <button data-v="Andrew">Andrew</button>
         <button data-v="Keren" class="on">Keren</button>
       </div>
+    </div>
+
+    <div class="cond" id="from-wrap">
+      <label class="f">From (name)</label>
+      <input id="refund-from" type="text" placeholder="Who's giving the money back?">
     </div>
 
     <div class="cond show" id="payment-wrap">
@@ -295,6 +301,9 @@ const fmt = (n, dec=0) => Number(n).toLocaleString('en-US', {maximumFractionDigi
 const rate = () => DATA?.budget?.ntPerUsd || 30;
 const usd = (t) => t.Currency === 'USD' ? Number(t.Amount) : Number(t.Amount) / rate();
 const isFlow = (t) => t.Type === 'Exchange' || t.Type === 'Transfer' || t.Type === 'Reconcile';
+// Refunds are negative spending: they add cash back and reduce the totals.
+const sign = (t) => t.Type === 'Refund' ? -1 : 1;
+const sUsd = (t) => sign(t) * usd(t);
 // Chronology key: entry date + edited time (legacy rows fall back to save time), save time as tiebreak.
 const timeOf = (t) => t.Time || (t['Logged At'] ? new Date(t['Logged At']).toTimeString().slice(0,5) : '00:00');
 const chrono = (t) => t.Date + 'T' + timeOf(t) + '|' + (t['Logged At'] || '');
@@ -342,11 +351,13 @@ function currentTag() {
 
 function applyKindUI() {
   const k = state.kind;
-  $('#payment-wrap').classList.toggle('show', k === 'Spend');
-  $('#tag-wrap').classList.toggle('show', k === 'Spend');
+  const spendish = k === 'Spend' || k === 'Refund';
+  $('#payment-wrap').classList.toggle('show', spendish);
+  $('#tag-wrap').classList.toggle('show', spendish);
   $('#to-wrap').classList.toggle('show', k === 'Transfer');
+  $('#from-wrap').classList.toggle('show', k === 'Refund');
   $('#received-wrap').classList.toggle('show', k === 'Exchange');
-  $('#amount-label').textContent = k === 'Exchange' ? 'Amount swapped' : 'Amount';
+  $('#amount-label').textContent = k === 'Exchange' ? 'Amount swapped' : k === 'Refund' ? 'Amount coming back' : 'Amount';
   if (k === 'Exchange') setCurrency('USD'); else if (k === 'Transfer') setCurrency('NT');
 }
 wireSeg('kind','kind', applyKindUI);
@@ -434,8 +445,9 @@ let editing = null;   // { loggedAt, type } while editing
 function startEdit(t) {
   if (t.Type === 'Reconcile') return;   // counts are edited in the sheet if ever needed
   editing = { loggedAt: t['Logged At'], type: t.Type };
-  const kind = t.Type === 'Exchange' ? 'Exchange' : t.Type === 'Transfer' ? 'Transfer' : 'Spend';
+  const kind = ['Exchange', 'Transfer', 'Refund'].includes(t.Type) ? t.Type : 'Spend';
   setSeg('kind', 'kind', kind); applyKindUI();
+  $('#refund-from').value = kind === 'Refund' ? (t.To || '') : '';
   setSeg('owner', 'owner', t.Owner === 'Keren' ? 'Keren' : 'Andrew');
   setSeg('payment', 'payment', t.Payment === 'Credit' ? 'Credit' : 'Cash');
   setCurrency(t.Currency === 'USD' ? 'USD' : 'NT');
@@ -462,7 +474,7 @@ function exitEdit() {
   editing = null;
   $('#edit-banner').style.display = 'none';
   $('#submit').textContent = 'Add transaction';
-  $('#amount').value = ''; $('#notes').value = ''; $('#received').value = '';
+  $('#amount').value = ''; $('#notes').value = ''; $('#received').value = ''; $('#refund-from').value = '';
   $('#date').value = todayISO(); $('#time').value = nowHM();
   state.tag = ''; $('#tag-custom').value = ''; $('#tag-custom').style.display = 'none';
   renderTagChips();
@@ -481,11 +493,12 @@ function buildBody() {
     msg.className='err'; msg.textContent = 'Enter the NT$ you received'; return null;
   }
   const type = state.kind;
+  const spendish = type === 'Spend' || type === 'Refund';
   return { date: $('#date').value || todayISO(), time: $('#time').value || nowHM(), owner: state.owner,
-    payment: state.kind === 'Spend' ? state.payment : 'Cash',
+    payment: spendish ? state.payment : 'Cash',
     amount, currency: state.currency, type,
-    tag: type === 'Spend' ? currentTag() : '',
-    to: type === 'Transfer' ? state.to : '',
+    tag: spendish ? currentTag() : '',
+    to: type === 'Transfer' ? state.to : (type === 'Refund' ? $('#refund-from').value.trim().slice(0, 40) : ''),
     received: type === 'Exchange' ? received : '',
     notes: $('#notes').value.trim() };
 }
@@ -498,6 +511,7 @@ $('#submit').addEventListener('click', () => {
   let line;
   if (body.type === 'Exchange') line = `💱 <b>${cur}${fmt(body.amount,2)}</b> → NT$${fmt(body.received)} (${body.owner})`;
   else if (body.type === 'Transfer') line = `↔︎ ${body.owner} gives <b>${cur}${fmt(body.amount,2)}</b> to ${body.to}`;
+  else if (body.type === 'Refund') line = `↩︎ <b>+${cur}${fmt(body.amount,2)}</b> back to ${body.owner} (${body.payment})${body.to ? ' from ' + escapeHtml(body.to) : ''}`;
   else line = `<b>${cur}${fmt(body.amount,2)}</b> · ${body.owner} · ${body.payment}`;
   $('#confirm-sum').innerHTML = line + `<br>${body.date} ${body.time}${body.tag ? ' · ' + escapeHtml(body.tag) : ''}${body.notes ? ' · ' + escapeHtml(body.notes) : ''}`;
   $('#msg').className = ''; $('#msg').textContent = '';
@@ -545,7 +559,7 @@ $('#confirm-yes').addEventListener('click', async () => {
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || r.status);
     msg.className='ok'; msg.textContent = '✓ Saved ' + (body.currency==='NT'?'NT$':'US$') + fmt(body.amount,2) + ' — ' + body.type;
-    $('#amount').value=''; $('#notes').value=''; $('#received').value='';
+    $('#amount').value=''; $('#notes').value=''; $('#received').value=''; $('#refund-from').value='';
     $('#time').value = nowHM();
     state.tag = ''; $('#tag-custom').value = ''; $('#tag-custom').style.display = 'none';
     document.querySelectorAll('#tag button').forEach(x => x.classList.remove('on'));
@@ -681,7 +695,7 @@ function mealStats() {
           : hm >= '16:00' && hm <= '22:30' ? 'Dinner' : '';
       if (!tag) continue;               // late-night untagged: not a meal
     }
-    const nt = t.Currency === 'NT' ? Number(t.Amount) : Number(t.Amount) * rate();
+    const nt = sign(t) * (t.Currency === 'NT' ? Number(t.Amount) : Number(t.Amount) * rate());
     const key = t.Date + '|' + tag;
     events[key] = (events[key] || 0) + nt;
   }
@@ -708,7 +722,7 @@ function renderAnalysis() {
   const catTotals = {};
   for (const t of DATA.transactions) {
     if (isFlow(t)) continue;
-    catTotals[catOf(t)] = (catTotals[catOf(t)] || 0) + usd(t);
+    catTotals[catOf(t)] = (catTotals[catOf(t)] || 0) + sUsd(t);
   }
   const cats = Object.entries(catTotals).sort((a, z) => z[1] - a[1]);
   const maxCat = cats.length ? cats[0][1] : 1;
@@ -735,7 +749,7 @@ function renderAnalysis() {
   // food total for reference.
   const b = DATA.budget, items = b.items || [];
   const funds = (b.startUsd?.Andrew || 0) + (b.startUsd?.Keren || 0);
-  const spent = DATA.transactions.filter(t => !isFlow(t)).reduce((s, t) => s + usd(t), 0);
+  const spent = DATA.transactions.filter(t => !isFlow(t)).reduce((s, t) => s + sUsd(t), 0);
   const food = foodBetween(b.tripStart, b.tripEnd);                       // whole trip (cumulative)
   const fromToday = todayISO() > b.tripStart ? todayISO() : b.tripStart;
   const foodAhead = todayISO() > b.tripEnd ? { nt: 0, days: 0, meals: 0 }
@@ -786,7 +800,7 @@ function renderAnalysis() {
   // Amount owed = credit-card charges (they never touched cash on hand).
   const owed = { Andrew: { NT: 0, USD: 0 }, Keren: { NT: 0, USD: 0 } };
   for (const t of DATA.transactions) {
-    if (t.Payment === 'Credit' && !isFlow(t) && owed[t.Owner]) owed[t.Owner][t.Currency] += Number(t.Amount) || 0;
+    if (t.Payment === 'Credit' && !isFlow(t) && owed[t.Owner]) owed[t.Owner][t.Currency] += sign(t) * (Number(t.Amount) || 0);
   }
   const usdEq = (o) => o.USD + o.NT / rate();
   const total = usdEq(owed.Andrew) + usdEq(owed.Keren);
@@ -833,6 +847,8 @@ function holdings() {
     } else if (t.Type === 'Transfer') {
       o[t.Currency] -= amt;
       if (h[t.To]) h[t.To][t.Currency] += amt;
+    } else if (t.Type === 'Refund') {
+      if (t.Payment === 'Cash') o[t.Currency] += amt;   // cash back in the wallet
     } else if (t.Payment === 'Cash') {
       o[t.Currency] -= amt;
     }
@@ -844,11 +860,11 @@ function renderTx() {
   if (!DATA) return;
   const txs = DATA.transactions.slice().sort((a,b) => chrono(b).localeCompare(chrono(a)));
   const spends = txs.filter(t => !isFlow(t));
-  const totNT = spends.filter(t=>t.Currency==='NT').reduce((s,t)=>s+Number(t.Amount),0);
-  const totUSD = spends.filter(t=>t.Currency==='USD').reduce((s,t)=>s+Number(t.Amount),0);
-  const all = spends.reduce((s,t)=>s+usd(t),0);
+  const totNT = spends.filter(t=>t.Currency==='NT').reduce((s,t)=>s+sign(t)*Number(t.Amount),0);
+  const totUSD = spends.filter(t=>t.Currency==='USD').reduce((s,t)=>s+sign(t)*Number(t.Amount),0);
+  const all = spends.reduce((s,t)=>s+sUsd(t),0);
   const today = todayISO();
-  const todaySpend = spends.filter(t=>t.Date===today).reduce((s,t)=>s+usd(t),0);
+  const todaySpend = spends.filter(t=>t.Date===today).reduce((s,t)=>s+sUsd(t),0);
   $('#totals').innerHTML = `
     <div class="tot"><div class="v">$${fmt(all,0)}</div><div class="k">Total spent (USD eq.)</div></div>
     <div class="tot"><div class="v">NT$${fmt(totNT)}</div><div class="k">+ US$${fmt(totUSD,0)} spent</div></div>
@@ -861,7 +877,7 @@ function renderTx() {
   let html = '', lastDay = '';
   for (const t of txs) {
     if (t.Date !== lastDay) {
-      const dayTotal = spends.filter(x=>x.Date===t.Date).reduce((s,x)=>s+usd(x),0);
+      const dayTotal = spends.filter(x=>x.Date===t.Date).reduce((s,x)=>s+sUsd(x),0);
       html += `<div class="day-h"><span>${t.Date}</span><span>$${fmt(dayTotal,0)} spent</span></div>`;
       lastDay = t.Date;
     }
@@ -875,6 +891,9 @@ function renderTx() {
     } else if (t.Type === 'Transfer') {
       title = `↔︎ ${t.Owner} → ${t.To}`;
       sub = `handed over cash`;
+    } else if (t.Type === 'Refund') {
+      title = `↩︎ Refund${t.To ? ' from ' + escapeHtml(t.To) : ''}${t.Notes ? ' · <span style="font-weight:400">' + escapeHtml(t.Notes) + '</span>' : ''}`;
+      sub = `${t.Owner} · ${t.Payment}`;
     } else {
       const label = (t.Type && t.Type !== 'Spend') ? t.Type : '';
       const tag = t.Tag ? '<span class="tag">'+t.Tag+'</span>' : '';
@@ -884,10 +903,11 @@ function renderTx() {
     }
     const hm = timeOf(t);
     const time = hm ? new Date('2000-01-01T' + hm).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : '';
+    const isRefund = t.Type === 'Refund';
     html += `<div class="tx${isFlow(t)?' flow':''}" data-logged="${t['Logged At'] || ''}">
       <div class="l"><div class="t">${title}</div><div class="s">${sub}${time ? ' · ' + time : ''}</div></div>
-      <div class="r"><div class="a">${t.Currency==='NT'?'NT$':'US$'}${fmt(t.Amount,2)}</div>
-        <div class="c">${isFlow(t) ? '' : '≈ $'+fmt(usd(t),1)}</div></div>
+      <div class="r"><div class="a"${isRefund ? ' style="color:var(--accent)"' : ''}>${isRefund ? '+' : ''}${t.Currency==='NT'?'NT$':'US$'}${fmt(t.Amount,2)}</div>
+        <div class="c">${isFlow(t) ? '' : (isRefund ? '−' : '≈ ') + '$'+fmt(usd(t),1)}</div></div>
       ${t['Logged At'] ? `<button class="del" data-logged="${t['Logged At']}" data-label="${escapeHtml(String(t.Notes || t.Type))} — ${t.Currency==='NT'?'NT$':'US$'}${fmt(t.Amount,2)}">✕</button>` : ''}
     </div>`;
   }

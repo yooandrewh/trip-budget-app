@@ -32,6 +32,7 @@ export default async function handler(req, res) {
     if (!b.type) return res.status(400).json({ error: 'Missing type' });
     if (!/^\d{4}-\d{2}-\d{2}$/.test(b.date || '')) return res.status(400).json({ error: 'Bad date' });
     if (b.type === 'Transfer' && !OWNERS.includes(b.to)) return res.status(400).json({ error: 'Transfer needs a receiver' });
+    // Refund: `to` is a free-text name (who the money came back from).
     const received = Number(b.received);
     if (b.type === 'Exchange' && !(isFinite(received) && received > 0)) {
       return res.status(400).json({ error: 'Exchange needs the NT$ received' });
@@ -46,7 +47,7 @@ export default async function handler(req, res) {
       'Currency': b.currency,
       'Type': String(b.type).slice(0, 40),
       'Tag': String(b.tag || '').slice(0, 40),
-      'To': b.type === 'Transfer' ? b.to : '',
+      'To': b.type === 'Transfer' ? b.to : (b.type === 'Refund' ? String(b.to || '').slice(0, 40) : ''),
       'Received': b.type === 'Exchange' ? received : '',
       'Notes': String(b.notes || '').slice(0, 500),
       'Logged At': new Date().toISOString(),
@@ -63,6 +64,7 @@ export default async function handler(req, res) {
         if (b.type === 'Exchange') text = `${b.owner} exchanged ${cur}${n(amount)} → NT$${n(received)}`;
         else if (b.type === 'Transfer') text = `${b.owner} gave ${b.to} ${cur}${n(amount)}`;
         else if (b.type === 'Reconcile') text = `${b.owner} counted ${cur}${n(amount)} cash on hand`;
+        else if (b.type === 'Refund') text = `${b.owner} got ${cur}${n(amount)} back${b.to ? ' from ' + b.to : ''}`;
         else text = `${b.owner} spent ${cur}${n(amount)}${b.notes ? ' · ' + b.notes : ''}`;
         const subs = (await getRows('Subs')).rows.filter((s) => s.Endpoint && s.Owner !== b.owner);
         await Promise.allSettled(subs.map((s) =>
