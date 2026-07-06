@@ -36,7 +36,7 @@ export default async function handler(req, res) {
         tripStart: settings['Trip Start'] || '',
         tripEnd: settings['Trip End'] || '',
         ntPerUsd: Number(settings['NT per USD']) || 30,
-        foodNtPerDay: Number(settings['Food NT per person per day']) || 200,
+        foodNtPerMeal: Number(settings['Food NT per person per meal']) || (Number(settings['Food NT per person per day']) || 300) / 3,
         people: Number(settings['People']) || 14,
         prepaidMeals: Number(settings['Prepaid meals']) || 0,
         tmfStart: settings['TMF Start'] || '',

@@ -13,7 +13,7 @@ const budget = {
   tripStart: '2026-07-01',
   tripEnd: '2026-07-31',
   ntPerUsd: 30,
-  foodNtPerDay: 300,
+  foodNtPerMeal: 250,
   people: 14,
   prepaidMeals: 14,
   tmfStart: '2026-07-20', tmfEnd: '2026-07-24',
