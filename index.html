@@ -151,8 +151,9 @@
       <button id="edit-cancel" style="border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:10px;padding:6px 12px;font-size:13px;font-weight:700">Cancel</button>
     </div>
     <div class="seg" id="kind" style="flex-wrap:wrap">
-      <button data-v="Spend" class="on" style="flex:1 1 45%">Spend</button>
+      <button data-v="Spend" class="on" style="flex:1 1 100%">Spend</button>
       <button data-v="Refund" style="flex:1 1 45%">↩︎ Refund</button>
+      <button data-v="Borrow" style="flex:1 1 45%">💵 Borrow</button>
       <button data-v="Exchange" style="flex:1 1 45%">💱 Exchange</button>
       <button data-v="Transfer" style="flex:1 1 45%">↔︎ Give cash</button>
     </div>
@@ -172,7 +173,7 @@
     </div>
 
     <div class="cond" id="from-wrap">
-      <label class="f">From (name)</label>
+      <label class="f" id="from-label">From (name)</label>
       <input id="refund-from" type="text" placeholder="Who's giving the money back?">
     </div>
 
@@ -300,7 +301,8 @@ $('#time').value = nowHM();
 const fmt = (n, dec=0) => Number(n).toLocaleString('en-US', {maximumFractionDigits: dec, minimumFractionDigits: 0});
 const rate = () => DATA?.budget?.ntPerUsd || 30;
 const usd = (t) => t.Currency === 'USD' ? Number(t.Amount) : Number(t.Amount) / rate();
-const isFlow = (t) => t.Type === 'Exchange' || t.Type === 'Transfer' || t.Type === 'Reconcile';
+// Flows move money around but are not spending (excluded from spent/chart/meals).
+const isFlow = (t) => t.Type === 'Exchange' || t.Type === 'Transfer' || t.Type === 'Reconcile' || t.Type === 'Borrow';
 // Refunds are negative spending: they add cash back and reduce the totals.
 const sign = (t) => t.Type === 'Refund' ? -1 : 1;
 const sUsd = (t) => sign(t) * usd(t);
@@ -352,12 +354,20 @@ function currentTag() {
 function applyKindUI() {
   const k = state.kind;
   const spendish = k === 'Spend' || k === 'Refund';
-  $('#payment-wrap').classList.toggle('show', spendish);
+  $('#payment-wrap').classList.toggle('show', spendish);   // Borrow is always cash
   $('#tag-wrap').classList.toggle('show', spendish);
   $('#to-wrap').classList.toggle('show', k === 'Transfer');
-  $('#from-wrap').classList.toggle('show', k === 'Refund');
+  $('#from-wrap').classList.toggle('show', k === 'Refund' || k === 'Borrow');
   $('#received-wrap').classList.toggle('show', k === 'Exchange');
-  $('#amount-label').textContent = k === 'Exchange' ? 'Amount swapped' : k === 'Refund' ? 'Amount coming back' : 'Amount';
+  $('#amount-label').textContent = k === 'Exchange' ? 'Amount swapped'
+    : k === 'Refund' ? 'Amount coming back' : k === 'Borrow' ? 'Amount to borrow' : 'Amount';
+  if (k === 'Borrow') {
+    $('#from-label').textContent = 'Borrowed from (name)';
+    $('#refund-from').placeholder = 'Who / which fund?';
+  } else {
+    $('#from-label').textContent = 'From (name)';
+    $('#refund-from').placeholder = "Who's giving the money back?";
+  }
   if (k === 'Exchange') setCurrency('USD'); else if (k === 'Transfer') setCurrency('NT');
 }
 wireSeg('kind','kind', applyKindUI);
@@ -445,9 +455,9 @@ let editing = null;   // { loggedAt, type } while editing
 function startEdit(t) {
   if (t.Type === 'Reconcile') return;   // counts are edited in the sheet if ever needed
   editing = { loggedAt: t['Logged At'], type: t.Type };
-  const kind = ['Exchange', 'Transfer', 'Refund'].includes(t.Type) ? t.Type : 'Spend';
+  const kind = ['Exchange', 'Transfer', 'Refund', 'Borrow'].includes(t.Type) ? t.Type : 'Spend';
   setSeg('kind', 'kind', kind); applyKindUI();
-  $('#refund-from').value = kind === 'Refund' ? (t.To || '') : '';
+  $('#refund-from').value = (kind === 'Refund' || kind === 'Borrow') ? (t.To || '') : '';
   setSeg('owner', 'owner', t.Owner === 'Keren' ? 'Keren' : 'Andrew');
   setSeg('payment', 'payment', t.Payment === 'Credit' ? 'Credit' : 'Cash');
   setCurrency(t.Currency === 'USD' ? 'USD' : 'NT');
@@ -498,7 +508,7 @@ function buildBody() {
     payment: spendish ? state.payment : 'Cash',
     amount, currency: state.currency, type,
     tag: spendish ? currentTag() : '',
-    to: type === 'Transfer' ? state.to : (type === 'Refund' ? $('#refund-from').value.trim().slice(0, 40) : ''),
+    to: type === 'Transfer' ? state.to : ((type === 'Refund' || type === 'Borrow') ? $('#refund-from').value.trim().slice(0, 40) : ''),
     received: type === 'Exchange' ? received : '',
     notes: $('#notes').value.trim() };
 }
@@ -512,6 +522,7 @@ $('#submit').addEventListener('click', () => {
   if (body.type === 'Exchange') line = `💱 <b>${cur}${fmt(body.amount,2)}</b> → NT$${fmt(body.received)} (${body.owner})`;
   else if (body.type === 'Transfer') line = `↔︎ ${body.owner} gives <b>${cur}${fmt(body.amount,2)}</b> to ${body.to}`;
   else if (body.type === 'Refund') line = `↩︎ <b>+${cur}${fmt(body.amount,2)}</b> back to ${body.owner} (${body.payment})${body.to ? ' from ' + escapeHtml(body.to) : ''}`;
+  else if (body.type === 'Borrow') line = `💵 <b>+${cur}${fmt(body.amount,2)}</b> borrowed by ${body.owner}${body.to ? ' from ' + escapeHtml(body.to) : ''} · draws down owed`;
   else line = `<b>${cur}${fmt(body.amount,2)}</b> · ${body.owner} · ${body.payment}`;
   $('#confirm-sum').innerHTML = line + `<br>${body.date} ${body.time}${body.tag ? ' · ' + escapeHtml(body.tag) : ''}${body.notes ? ' · ' + escapeHtml(body.notes) : ''}`;
   $('#msg').className = ''; $('#msg').textContent = '';
@@ -798,9 +809,12 @@ function renderAnalysis() {
   $('#budget').innerHTML = bhtml;
 
   // Amount owed = credit-card charges (they never touched cash on hand).
+  // Borrowing cash draws this down: you convert what you're owed into cash now.
   const owed = { Andrew: { NT: 0, USD: 0 }, Keren: { NT: 0, USD: 0 } };
   for (const t of DATA.transactions) {
-    if (t.Payment === 'Credit' && !isFlow(t) && owed[t.Owner]) owed[t.Owner][t.Currency] += sign(t) * (Number(t.Amount) || 0);
+    if (!owed[t.Owner]) continue;
+    if (t.Payment === 'Credit' && !isFlow(t)) owed[t.Owner][t.Currency] += sign(t) * (Number(t.Amount) || 0);
+    else if (t.Type === 'Borrow') owed[t.Owner][t.Currency] -= Number(t.Amount) || 0;
   }
   const usdEq = (o) => o.USD + o.NT / rate();
   const total = usdEq(owed.Andrew) + usdEq(owed.Keren);
@@ -849,6 +863,8 @@ function holdings() {
       if (h[t.To]) h[t.To][t.Currency] += amt;
     } else if (t.Type === 'Refund') {
       if (t.Payment === 'Cash') o[t.Currency] += amt;   // cash back in the wallet
+    } else if (t.Type === 'Borrow') {
+      o[t.Currency] += amt;   // borrowed cash lands in the wallet
     } else if (t.Payment === 'Cash') {
       o[t.Currency] -= amt;
     }
@@ -894,6 +910,9 @@ function renderTx() {
     } else if (t.Type === 'Refund') {
       title = `↩︎ Refund${t.To ? ' from ' + escapeHtml(t.To) : ''}${t.Notes ? ' · <span style="font-weight:400">' + escapeHtml(t.Notes) + '</span>' : ''}`;
       sub = `${t.Owner} · ${t.Payment}`;
+    } else if (t.Type === 'Borrow') {
+      title = `💵 Borrow${t.To ? ' from ' + escapeHtml(t.To) : ''}${t.Notes ? ' · <span style="font-weight:400">' + escapeHtml(t.Notes) + '</span>' : ''}`;
+      sub = `${t.Owner} · drawn from owed`;
     } else {
       const label = (t.Type && t.Type !== 'Spend') ? t.Type : '';
       const tag = t.Tag ? '<span class="tag">'+t.Tag+'</span>' : '';
@@ -903,11 +922,14 @@ function renderTx() {
     }
     const hm = timeOf(t);
     const time = hm ? new Date('2000-01-01T' + hm).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : '';
-    const isRefund = t.Type === 'Refund';
+    const moneyIn = t.Type === 'Refund' || t.Type === 'Borrow';
+    const cLine = isFlow(t)
+      ? (t.Type === 'Borrow' ? 'owed −$' + fmt(usd(t),1) : '')
+      : (t.Type === 'Refund' ? '−' : '≈ ') + '$' + fmt(usd(t),1);
     html += `<div class="tx${isFlow(t)?' flow':''}" data-logged="${t['Logged At'] || ''}">
       <div class="l"><div class="t">${title}</div><div class="s">${sub}${time ? ' · ' + time : ''}</div></div>
-      <div class="r"><div class="a"${isRefund ? ' style="color:var(--accent)"' : ''}>${isRefund ? '+' : ''}${t.Currency==='NT'?'NT$':'US$'}${fmt(t.Amount,2)}</div>
-        <div class="c">${isFlow(t) ? '' : (isRefund ? '−' : '≈ ') + '$'+fmt(usd(t),1)}</div></div>
+      <div class="r"><div class="a"${moneyIn ? ' style="color:var(--accent)"' : ''}>${moneyIn ? '+' : ''}${t.Currency==='NT'?'NT$':'US$'}${fmt(t.Amount,2)}</div>
+        <div class="c">${cLine}</div></div>
       ${t['Logged At'] ? `<button class="del" data-logged="${t['Logged At']}" data-label="${escapeHtml(String(t.Notes || t.Type))} — ${t.Currency==='NT'?'NT$':'US$'}${fmt(t.Amount,2)}">✕</button>` : ''}
     </div>`;
   }

@@ -47,7 +47,7 @@ export default async function handler(req, res) {
       'Currency': b.currency,
       'Type': String(b.type).slice(0, 40),
       'Tag': String(b.tag || '').slice(0, 40),
-      'To': b.type === 'Transfer' ? b.to : (b.type === 'Refund' ? String(b.to || '').slice(0, 40) : ''),
+      'To': b.type === 'Transfer' ? b.to : ((b.type === 'Refund' || b.type === 'Borrow') ? String(b.to || '').slice(0, 40) : ''),
       'Received': b.type === 'Exchange' ? received : '',
       'Notes': String(b.notes || '').slice(0, 500),
       'Logged At': new Date().toISOString(),
@@ -65,6 +65,7 @@ export default async function handler(req, res) {
         else if (b.type === 'Transfer') text = `${b.owner} gave ${b.to} ${cur}${n(amount)}`;
         else if (b.type === 'Reconcile') text = `${b.owner} counted ${cur}${n(amount)} cash on hand`;
         else if (b.type === 'Refund') text = `${b.owner} got ${cur}${n(amount)} back${b.to ? ' from ' + b.to : ''}`;
+        else if (b.type === 'Borrow') text = `${b.owner} borrowed ${cur}${n(amount)}${b.to ? ' from ' + b.to : ''}`;
         else text = `${b.owner} spent ${cur}${n(amount)}${b.notes ? ' · ' + b.notes : ''}`;
         const subs = (await getRows('Subs')).rows.filter((s) => s.Endpoint && s.Owner !== b.owner);
         await Promise.allSettled(subs.map((s) =>
